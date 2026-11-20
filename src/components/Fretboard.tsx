@@ -89,7 +89,7 @@ export function Fretboard({ song, ed }: Props) {
               <rect x={0} y={stringY(s) - SPACING / 2} width={wireX(N)} height={SPACING} className="fb-cursor-row" />
             )}
             <line
-              x1={0}
+              x1={20}
               x2={wireX(N)}
               y1={stringY(s)}
               y2={stringY(s)}

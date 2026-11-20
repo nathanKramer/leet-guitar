@@ -3,7 +3,7 @@ import type { EditorState } from '../editor/editorStore';
 import { moveSelection, stepTicks } from '../editor/actions';
 import { barTicks, beatTicks, describeDuration } from '../model/durations';
 import { stringLabel } from '../model/music';
-import type { ID, Song } from '../model/types';
+import type { ID, Note, Song } from '../model/types';
 import { editor } from '../session';
 import type { PeerState } from '../sync/awareness';
 
@@ -46,6 +46,13 @@ export function Timeline({ song, ed, peers }: Props) {
   const strings = track?.tuning.length ?? 6;
   const height = RULER_H + PAD * 2 + strings * ROW_H;
   const rowY = (s: number) => RULER_H + PAD + s * ROW_H + ROW_H / 2;
+  /** On-screen box of a note chip; shared by rendering and box selection. */
+  const chipRect = (n: Note, start = n.start) => ({
+    x: start * ppt + 1,
+    w: Math.max(n.duration * ppt - 2, 14),
+    y: rowY(n.string) - CHIP_H / 2,
+  });
+  const [marquee, setMarquee] = useState<{ x0: number; x1: number; y0: number; y1: number } | null>(null);
 
   // Snapped drag offset, applied to dragged notes as a live preview.
   const dragDelta = drag ? Math.round(drag.dx / ppt / step) * step : 0;
@@ -89,16 +96,44 @@ export function Timeline({ song, ed, peers }: Props) {
 
   const onBackgroundDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    const rect = svgRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const svg = svgRef.current!;
+    const toSvg = (ev: { clientX: number; clientY: number }) => {
+      const r = svg.getBoundingClientRect();
+      return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    };
+    const { x, y } = toSvg(e);
     const tick = Math.max(0, Math.floor(x / ppt / step) * step);
     const s = Math.floor((y - RULER_H - PAD) / ROW_H);
+    const base = e.shiftKey ? editor.get().selection : [];
     editor.set((st) => ({
       cursor: tick,
       cursorString: s >= 0 && s < strings ? s : st.cursorString,
-      selection: e.shiftKey ? st.selection : [],
+      selection: base,
     }));
+
+    // Dragging from empty space draws a selection box; anything it touches is selected.
+    let active = false;
+    const onMove = (ev: MouseEvent) => {
+      const p = toSvg(ev);
+      if (!active && Math.hypot(p.x - x, p.y - y) < 4) return;
+      active = true;
+      const box = { x0: Math.min(x, p.x), x1: Math.max(x, p.x), y0: Math.min(y, p.y), y1: Math.max(y, p.y) };
+      setMarquee(box);
+      const hits = notes
+        .filter((n) => {
+          const c = chipRect(n);
+          return c.x < box.x1 && c.x + c.w > box.x0 && c.y < box.y1 && c.y + CHIP_H > box.y0;
+        })
+        .map((n) => n.id);
+      editor.set({ selection: [...new Set([...base, ...hits])] });
+    };
+    const onUp = () => {
+      setMarquee(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
 
   const onNoteDown = (e: React.MouseEvent, id: ID) => {
@@ -171,9 +206,7 @@ export function Timeline({ song, ed, peers }: Props) {
 
           {notes.map((n) => {
             const start = dragging.has(n.id) ? Math.max(0, n.start + dragDelta) : n.start;
-            const x = start * ppt + 1;
-            const w = Math.max(n.duration * ppt - 2, 14);
-            const y = rowY(n.string) - CHIP_H / 2;
+            const { x, w, y } = chipRect(n, start);
             const triplet = describeDuration(n.duration)?.triplet;
             const cls = ['tl-note', `s${n.string}`, selected.has(n.id) ? 'selected' : ''].join(' ');
             return (
@@ -213,6 +246,16 @@ export function Timeline({ song, ed, peers }: Props) {
           <line x1={ed.cursor * ppt} x2={ed.cursor * ppt} y1={0} y2={height} className="tl-cursor" />
           {ed.playhead !== null && (
             <line x1={ed.playhead * ppt} x2={ed.playhead * ppt} y1={0} y2={height} className="tl-playhead" />
+          )}
+          {marquee && (
+            <rect
+              x={marquee.x0}
+              y={marquee.y0}
+              width={marquee.x1 - marquee.x0}
+              height={marquee.y1 - marquee.y0}
+              className="tl-marquee"
+              pointerEvents="none"
+            />
           )}
         </svg>
       </div>
