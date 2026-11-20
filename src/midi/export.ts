@@ -1,0 +1,105 @@
+/** Standard MIDI File (format 1) writer. */
+import { PPQ } from '../model/durations';
+import type { Song } from '../model/types';
+
+export type ChannelMode =
+  /** One channel per track. */
+  | 'per-track'
+  /** One channel per string (1-6), the convention MIDI guitar controllers and many tab editors use. */
+  | 'per-string';
+
+interface TimedEvent {
+  tick: number;
+  /** Sorts events at the same tick: meta/program first, then note-offs, then note-ons. */
+  order: number;
+  bytes: number[];
+}
+
+export function vlq(value: number): number[] {
+  const bytes = [value & 0x7f];
+  value >>>= 7;
+  while (value > 0) {
+    bytes.unshift((value & 0x7f) | 0x80);
+    value >>>= 7;
+  }
+  return bytes;
+}
+
+const ascii = (s: string) => Array.from(new TextEncoder().encode(s));
+const u32 = (n: number) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+const u16 = (n: number) => [(n >>> 8) & 0xff, n & 0xff];
+
+function metaEvent(type: number, data: number[]): number[] {
+  return [0xff, type, ...vlq(data.length), ...data];
+}
+
+function chunk(id: string, data: number[]): number[] {
+  return [...ascii(id), ...u32(data.length), ...data];
+}
+
+function trackChunk(events: TimedEvent[]): number[] {
+  events.sort((a, b) => a.tick - b.tick || a.order - b.order);
+  const data: number[] = [];
+  let last = 0;
+  for (const e of events) {
+    data.push(...vlq(e.tick - last), ...e.bytes);
+    last = e.tick;
+  }
+  data.push(0x00, ...metaEvent(0x2f, []));
+  return chunk('MTrk', data);
+}
+
+/** Skip channel 10 (index 9), which General MIDI reserves for drums. */
+function channelFor(index: number): number {
+  const ch = index % 15;
+  return ch >= 9 ? ch + 1 : ch;
+}
+
+export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Array {
+  const tracks = Object.values(song.tracks).sort((a, b) => a.order - b.order);
+  const { meta } = song;
+
+  const tempo = Math.round(60_000_000 / meta.bpm);
+  const conductor: TimedEvent[] = [
+    { tick: 0, order: 0, bytes: metaEvent(0x03, ascii(meta.title)) },
+    { tick: 0, order: 0, bytes: metaEvent(0x51, [(tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff]) },
+    {
+      tick: 0,
+      order: 0,
+      bytes: metaEvent(0x58, [meta.beatsPerBar, Math.round(Math.log2(meta.beatUnit)), 24, 8]),
+    },
+  ];
+  const chunks = [trackChunk(conductor)];
+
+  tracks.forEach((track, ti) => {
+    const events: TimedEvent[] = [{ tick: 0, order: 0, bytes: metaEvent(0x03, ascii(track.name)) }];
+    const channels =
+      mode === 'per-string' ? track.tuning.map((_, s) => channelFor(s)) : track.tuning.map(() => channelFor(ti));
+    for (const ch of new Set(channels)) {
+      events.push({ tick: 0, order: 0, bytes: [0xc0 | ch, track.program & 0x7f] });
+    }
+    for (const n of Object.values(song.notes)) {
+      if (n.trackId !== track.id) continue;
+      const ch = channels[n.string] ?? channels[0];
+      const pitch = Math.min(127, Math.max(0, track.tuning[n.string] + n.fret));
+      const vel = Math.min(127, Math.max(1, Math.round(n.velocity)));
+      events.push({ tick: n.start, order: 2, bytes: [0x90 | ch, pitch, vel] });
+      events.push({ tick: n.start + n.duration, order: 1, bytes: [0x80 | ch, pitch, 0] });
+    }
+    chunks.push(trackChunk(events));
+  });
+
+  const header = chunk('MThd', [...u16(1), ...u16(chunks.length), ...u16(PPQ)]);
+  return new Uint8Array([...header, ...chunks.flat()]);
+}
+
+export function downloadMidi(song: Song, mode: ChannelMode) {
+  const bytes = exportMidi(song, mode);
+  const blob = new Blob([bytes], { type: 'audio/midi' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${song.meta.title.trim() || 'untitled'}.mid`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
