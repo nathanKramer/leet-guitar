@@ -3,6 +3,7 @@ import { midiToFrequency } from '../model/music';
 import type { Song, Track } from '../model/types';
 import { audio } from './context';
 import { DrumSynth } from './drums';
+import { PianoSynth } from './piano';
 import type { SoundEngine } from './engine';
 
 /**
@@ -89,6 +90,7 @@ class PluckSynth {
 
 export class BuiltInEngine implements SoundEngine {
   private strings = new PluckSynth();
+  private piano = new PianoSynth();
   private drums = new DrumSynth();
   private sources = new Set<AudioScheduledSourceNode>();
 
@@ -100,7 +102,9 @@ export class BuiltInEngine implements SoundEngine {
     const nodes =
       track.kind === 'drums'
         ? this.drums.play(pitch, when, velocity)
-        : this.strings.play(pitch, when, duration, velocity, track.kind);
+        : track.kind === 'piano'
+          ? this.piano.play(pitch, when, duration, velocity)
+          : this.strings.play(pitch, when, duration, velocity, track.kind);
     for (const n of nodes) {
       this.sources.add(n);
       n.addEventListener('ended', () => this.sources.delete(n));
@@ -110,6 +114,7 @@ export class BuiltInEngine implements SoundEngine {
   preview(_song: Song, track: Track, pitch: number) {
     const when = audio().ctx.currentTime + 0.01;
     if (track.kind === 'drums') this.drums.play(pitch, when, 100);
+    else if (track.kind === 'piano') this.piano.play(pitch, when, 0.6, 96);
     else this.strings.play(pitch, when, 0.6, 96, track.kind);
   }
 

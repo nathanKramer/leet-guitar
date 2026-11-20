@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { DrumPads } from './components/DrumPads';
 import { Fretboard } from './components/Fretboard';
+import { PianoKeys } from './components/PianoKeys';
 import { Timeline } from './components/Timeline';
 import { Toolbar } from './components/Toolbar';
 import { TrackBar } from './components/TrackBar';
@@ -46,6 +47,7 @@ export default function App() {
       <main>
         <TrackBar song={song} ed={ed} />
         <Fretboard song={song} ed={ed} />
+        <PianoKeys song={song} ed={ed} />
         <DrumPads song={song} ed={ed} />
         <Timeline song={song} ed={ed} peers={peers} />
         <footer className="statusbar">
@@ -62,7 +64,13 @@ export default function App() {
               'No selection'
             )}
           </span>
-          {song.tracks[ed.trackId]?.kind === 'drums' ? (
+          {song.tracks[ed.trackId]?.kind === 'piano' ? (
+            <span className="keys">
+              <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> key ·{' '}
+              <kbd>Alt ↑↓</kbd> semitone · <kbd>Shift ↑↓</kbd> octave · <kbd>Alt ←→</kbd> move notes ·{' '}
+              <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+            </span>
+          ) : song.tracks[ed.trackId]?.kind === 'drums' ? (
             <span className="keys">
               <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>1-9</kbd> pads · <kbd>←→</kbd> cursor ·{' '}
               <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>Space</kbd> play · <kbd>Del</kbd> delete

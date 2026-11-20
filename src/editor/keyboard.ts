@@ -23,6 +23,7 @@ function enterDigit(d: number) {
     if (d >= 1 && d <= track.tuning.length) act.placeNote(d - 1, 0, { advance: false });
     return;
   }
+  if (track.kind === 'piano') return; // no frets to type
   const now = Date.now();
   if (pendingDigit && now - pendingDigit.at < DIGIT_WINDOW_MS && docStore.getSong().notes[pendingDigit.id]) {
     const combined = pendingDigit.value * 10 + d;
@@ -77,8 +78,10 @@ export function handleKeyDown(e: KeyboardEvent) {
       case 'ArrowUp':
       case 'ArrowDown': {
         const dir = e.key === 'ArrowDown' ? 1 : -1;
+        const piano = docStore.getSong().tracks[editor.get().trackId]?.kind === 'piano';
         if (e.altKey && hasSel) act.moveSelectionString(dir);
-        else if (e.shiftKey && hasSel) act.shiftSelectionFret(-dir);
+        // Piano has no frets: Shift moves by an octave instead.
+        else if (e.shiftKey && hasSel) piano ? act.moveSelectionString(dir * 12) : act.shiftSelectionFret(-dir);
         else act.moveCursorString(dir);
         break;
       }

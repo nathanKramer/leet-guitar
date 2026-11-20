@@ -3,7 +3,7 @@
  * nothing here mutates state, so commands are easy to test and to run on a server.
  */
 import type { Op } from './crdt';
-import { TRACK_KINDS } from './instruments';
+import { isStringed, TRACK_KINDS } from './instruments';
 import { newId } from './id';
 import { META_ID } from './materialize';
 import type { ID, Note, Song, SongMeta, Track, TrackKind } from './types';
@@ -132,19 +132,20 @@ export function shiftFrets(song: Song, ids: ID[], delta: number): Op[] {
 }
 
 /**
- * Guitar/bass: move notes to an adjacent string while keeping the same pitch.
- * Drums: move hits to the adjacent lane (a different kit piece).
+ * Guitar/bass: move notes to another string while keeping the same pitch.
+ * Piano: move notes by `delta` keys (lane 0 is the top key, so -1 is a semitone up).
+ * Drums: move hits to another lane (a different kit piece).
  */
-export function moveToString(song: Song, ids: ID[], direction: -1 | 1): Op[] {
+export function moveToString(song: Song, ids: ID[], delta: number): Op[] {
   const ops: Op[] = [];
   const moving = new Set(ids);
   for (const id of ids) {
     const n = song.notes[id];
     const track = n && song.tracks[n.trackId];
     if (!track) continue;
-    const s = n.string + direction;
+    const s = n.string + delta;
     if (s < 0 || s >= track.tuning.length) continue;
-    const fret = track.kind === 'drums' ? 0 : n.fret + track.tuning[n.string] - track.tuning[s];
+    const fret = isStringed(track.kind) ? n.fret + track.tuning[n.string] - track.tuning[s] : 0;
     if (fret < 0 || fret > track.frets) continue;
     ops.push(...clearSpace(song, n.trackId, s, n.start, n.start + n.duration, moving));
     ops.push(patchNote(id, { string: s, fret }));

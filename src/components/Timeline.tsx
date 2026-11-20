@@ -3,6 +3,9 @@ import type { EditorState } from '../editor/editorStore';
 import { moveSelection, placeNote, stepTicks } from '../editor/actions';
 import { barTicks, beatTicks, describeDuration } from '../model/durations';
 import { isCymbal, laneLabel } from '../model/drums';
+import { isStringed } from '../model/instruments';
+import { visibleLanes } from '../model/lanes';
+import { isBlackKey, pitchName } from '../model/music';
 import type { ID, Note, Song } from '../model/types';
 import { editor } from '../session';
 import type { PeerState } from '../sync/awareness';
@@ -11,6 +14,8 @@ const RULER_H = 24;
 const PAD = 8;
 const ROW_H = 26;
 const CHIP_H = 20;
+const PIANO_ROW_H = 14;
+const PIANO_CHIP_H = 12;
 
 interface Props {
   song: Song;
@@ -43,14 +48,22 @@ export function Timeline({ song, ed, peers }: Props) {
   const bars = Math.max(8, Math.ceil(Math.max(lastEnd, ed.cursor + step) / bar) + 2);
   const total = bars * bar;
   const width = total * ppt;
-  const strings = track?.tuning.length ?? 6;
-  const height = RULER_H + PAD * 2 + strings * ROW_H;
-  const rowY = (s: number) => RULER_H + PAD + s * ROW_H + ROW_H / 2;
+  const piano = track?.kind === 'piano';
+  const rowH = piano ? PIANO_ROW_H : ROW_H;
+  const chipH = piano ? PIANO_CHIP_H : CHIP_H;
+  const [laneStart, laneCount] = useMemo(
+    () => visibleLanes(track?.kind ?? 'guitar', track?.tuning.length ?? 6, [...notes.map((n) => n.string), ed.cursorString]),
+    [track?.kind, track?.tuning.length, notes, ed.cursorString],
+  );
+  const lanes = Array.from({ length: laneCount }, (_, i) => laneStart + i);
+  const inView = (lane: number) => lane >= laneStart && lane < laneStart + laneCount;
+  const height = RULER_H + PAD * 2 + laneCount * rowH;
+  const rowY = (s: number) => RULER_H + PAD + (s - laneStart) * rowH + rowH / 2;
   /** On-screen box of a note chip; shared by rendering and box selection. */
   const chipRect = (n: Note, start = n.start) => ({
     x: start * ppt + 1,
-    w: Math.max(n.duration * ppt - 2, 14),
-    y: rowY(n.string) - CHIP_H / 2,
+    w: Math.max(n.duration * ppt - 2, piano ? 6 : 14),
+    y: rowY(n.string) - chipH / 2,
   });
   const [marquee, setMarquee] = useState<{ x0: number; x1: number; y0: number; y1: number } | null>(null);
 
@@ -94,6 +107,7 @@ export function Timeline({ song, ed, peers }: Props) {
 
   if (!track) return null;
   const isDrums = track.kind === 'drums';
+  const clickToAdd = !isStringed(track.kind);
 
   const onBackgroundDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -104,11 +118,12 @@ export function Timeline({ song, ed, peers }: Props) {
     };
     const { x, y } = toSvg(e);
     const tick = Math.max(0, Math.floor(x / ppt / step) * step);
-    const s = Math.floor((y - RULER_H - PAD) / ROW_H);
+    const s = laneStart + Math.floor((y - RULER_H - PAD) / rowH);
+    const onLane = y >= RULER_H + PAD && inView(s);
     const base = e.shiftKey ? editor.get().selection : [];
     editor.set((st) => ({
       cursor: tick,
-      cursorString: s >= 0 && s < strings ? s : st.cursorString,
+      cursorString: onLane ? s : st.cursorString,
       selection: base,
     }));
 
@@ -123,7 +138,7 @@ export function Timeline({ song, ed, peers }: Props) {
       const hits = notes
         .filter((n) => {
           const c = chipRect(n);
-          return c.x < box.x1 && c.x + c.w > box.x0 && c.y < box.y1 && c.y + CHIP_H > box.y0;
+          return c.x < box.x1 && c.x + c.w > box.x0 && c.y < box.y1 && c.y + chipH > box.y0;
         })
         .map((n) => n.id);
       editor.set({ selection: [...new Set([...base, ...hits])] });
@@ -132,8 +147,8 @@ export function Timeline({ song, ed, peers }: Props) {
       setMarquee(null);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      // Drum tracks work like a step sequencer: a plain click on an empty cell adds a hit.
-      if (!active && isDrums && !e.shiftKey && s >= 0 && s < strings) placeNote(s, 0, { advance: false });
+      // Drums and piano work like a step sequencer / piano roll: a plain click on an empty cell adds a note.
+      if (!active && clickToAdd && !e.shiftKey && onLane) placeNote(s, 0, { advance: false });
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -175,12 +190,17 @@ export function Timeline({ song, ed, peers }: Props) {
 
   return (
     <div className="timeline">
-      <div className={isDrums ? 'tl-gutter drums' : 'tl-gutter'} style={{ height }}>
-        {track.tuning.map((_, s) => (
+      <div className={`tl-gutter ${track.kind}`} style={{ height }}>
+        {lanes.map((s) => (
           <div
             key={s}
-            className={s === ed.cursorString ? 'tl-label active' : 'tl-label'}
-            style={{ top: rowY(s) - ROW_H / 2, height: ROW_H }}
+            className={[
+              'tl-label',
+              s === ed.cursorString ? 'active' : '',
+              piano && isBlackKey(track.tuning[s]) ? 'black-key' : '',
+              piano && track.tuning[s] % 12 === 0 ? 'octave' : '',
+            ].join(' ')}
+            style={{ top: rowY(s) - rowH / 2, height: rowH }}
           >
             {laneLabel(track, s)}
           </div>
@@ -194,16 +214,25 @@ export function Timeline({ song, ed, peers }: Props) {
               {i + 1}
             </text>
           ))}
-          {track.tuning.map((_, s) => (
-            <line key={s} x1={0} x2={width} y1={rowY(s)} y2={rowY(s)} className="tl-string" />
-          ))}
+          {piano
+            ? lanes.map((s) => (
+                <g key={s}>
+                  {isBlackKey(track.tuning[s]) && (
+                    <rect x={0} y={rowY(s) - rowH / 2} width={width} height={rowH} className="tl-blackkey" />
+                  )}
+                  {track.tuning[s] % 12 === 0 && (
+                    <line x1={0} x2={width} y1={rowY(s) + rowH / 2} y2={rowY(s) + rowH / 2} className="tl-octave" />
+                  )}
+                </g>
+              ))
+            : lanes.map((s) => <line key={s} x1={0} x2={width} y1={rowY(s)} y2={rowY(s)} className="tl-string" />)}
           {gridLines}
 
           <rect
             x={ed.cursor * ppt}
-            y={rowY(ed.cursorString) - ROW_H / 2}
+            y={rowY(ed.cursorString) - rowH / 2}
             width={Math.max(step * ppt, 6)}
-            height={ROW_H}
+            height={rowH}
             className="tl-cursor-cell"
           />
 
@@ -211,14 +240,24 @@ export function Timeline({ song, ed, peers }: Props) {
             const start = dragging.has(n.id) ? Math.max(0, n.start + dragDelta) : n.start;
             const { x, w, y } = chipRect(n, start);
             const triplet = describeDuration(n.duration)?.triplet;
-            const cls = ['tl-note', `s${n.string % 6}`, selected.has(n.id) ? 'selected' : ''].join(' ');
+            const color = piano ? 'piano' : `s${n.string % 6}`;
+            const cls = ['tl-note', color, selected.has(n.id) ? 'selected' : ''].join(' ');
+            const label = piano
+              ? w >= 30
+                ? pitchName(track.tuning[n.string])
+                : ''
+              : isDrums
+                ? isCymbal(track.tuning[n.string])
+                  ? '×'
+                  : '●'
+                : n.fret;
             return (
               <g key={n.id} className={cls} onMouseDown={(e) => onNoteDown(e, n.id)}>
-                <rect x={x} y={y} width={w} height={CHIP_H} rx={4} />
-                <text x={x + 5} y={y + 14} className="tl-fret">
-                  {isDrums ? (isCymbal(track.tuning[n.string]) ? '×' : '●') : n.fret}
+                <rect x={x} y={y} width={w} height={chipH} rx={piano ? 2 : 4} />
+                <text x={x + (piano ? 3 : 5)} y={y + (piano ? 9.5 : 14)} className={piano ? 'tl-fret small' : 'tl-fret'}>
+                  {label}
                 </text>
-                {triplet && w > 22 && (
+                {triplet && w > 22 && !piano && (
                   <text x={x + w - 4} y={y + 8} className="tl-tuplet">
                     3
                   </text>
@@ -228,15 +267,15 @@ export function Timeline({ song, ed, peers }: Props) {
           })}
 
           {peers
-            .filter((p) => p.trackId === ed.trackId)
+            .filter((p) => p.trackId === ed.trackId && inView(p.string))
             .map((p) => (
               <g key={p.actor} pointerEvents="none">
                 <line x1={p.cursor * ppt} x2={p.cursor * ppt} y1={RULER_H} y2={height} stroke={p.color} strokeWidth={2} />
                 <rect
                   x={p.cursor * ppt}
-                  y={rowY(p.string) - ROW_H / 2}
+                  y={rowY(p.string) - rowH / 2}
                   width={step * ppt}
-                  height={ROW_H}
+                  height={rowH}
                   fill={p.color}
                   opacity={0.15}
                 />

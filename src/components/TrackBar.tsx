@@ -4,7 +4,9 @@ import type { EditorState } from '../editor/editorStore';
 import { setTrackProgram, sortedTracks } from '../model/commands';
 import { TRACK_KIND_ORDER, TRACK_KINDS } from '../model/instruments';
 import { docStore } from '../session';
-import type { Song } from '../model/types';
+import type { Song, TrackKind } from '../model/types';
+
+const TAB_ICONS: Record<TrackKind, string> = { guitar: '🎸', bass: '🎸', piano: '🎹', drums: '🥁' };
 
 export function TrackBar({ song, ed }: { song: Song; ed: EditorState }) {
   const tracks = sortedTracks(song);
@@ -18,7 +20,7 @@ export function TrackBar({ song, ed }: { song: Song; ed: EditorState }) {
         return (
           <div key={t.id} className={['track-tab', active ? 'active' : '', muted ? 'muted-track' : ''].join(' ')}>
             <button className="tab-main" onClick={() => act.selectTrack(t.id)} onDoubleClick={() => setRenaming(t.id)} title="Double-click to rename">
-              <span className={`tab-icon ${t.kind}`}>{t.kind === 'drums' ? '🥁' : '🎸'}</span>
+              <span className={`tab-icon ${t.kind}`}>{TAB_ICONS[t.kind]}</span>
               {renaming === t.id ? (
                 <input
                   autoFocus

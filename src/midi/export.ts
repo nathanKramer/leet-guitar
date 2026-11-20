@@ -1,5 +1,6 @@
 /** Standard MIDI File (format 1) writer. */
 import { sortedTracks } from '../model/commands';
+import { isStringed } from '../model/instruments';
 import { PPQ } from '../model/durations';
 import { DRUM_CHANNEL, stringChannels, trackChannels } from './channels';
 import type { Song } from '../model/types';
@@ -72,7 +73,7 @@ export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Ar
     const events: TimedEvent[] = [{ tick: 0, order: 0, bytes: metaEvent(0x03, ascii(track.name)) }];
     const drums = track.kind === 'drums';
     const channels =
-      !drums && mode === 'per-string'
+      isStringed(track.kind) && mode === 'per-string'
         ? stringChannels(track)
         : track.tuning.map(() => trackChannel.get(track.id) ?? DRUM_CHANNEL);
     // Drums: program change on channel 10 selects the kit (GS convention); the standard kit needs none.

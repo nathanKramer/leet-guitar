@@ -1,6 +1,7 @@
 /** User-level actions shared by the toolbar, fretboard, timeline and keyboard shortcuts. */
 import * as cmd from '../model/commands';
 import { durationTicks, type BaseDuration } from '../model/durations';
+import { TRACK_KINDS } from '../model/instruments';
 import type { ID, TrackKind } from '../model/types';
 import { docStore, editor, player } from '../session';
 
@@ -88,8 +89,9 @@ export function shiftSelectionFret(delta: number) {
   docStore.transact(cmd.shiftFrets(song(), liveSelection(), delta));
 }
 
-export function moveSelectionString(direction: -1 | 1) {
-  docStore.transact(cmd.moveToString(song(), liveSelection(), direction));
+/** Move selected notes `delta` lanes: to another string (guitar/bass), key (piano) or kit piece (drums). */
+export function moveSelectionString(delta: number) {
+  docStore.transact(cmd.moveToString(song(), liveSelection(), delta));
 }
 
 export function deleteSelection() {
@@ -149,7 +151,8 @@ export function redo() {
 
 export function selectTrack(trackId: ID) {
   if (trackId === ed().trackId) return;
-  editor.set({ trackId, selection: [], cursorString: 0 });
+  const track = song().tracks[trackId];
+  editor.set({ trackId, selection: [], cursorString: track ? TRACK_KINDS[track.kind].homeLane : 0 });
 }
 
 export function addTrack(kind: TrackKind) {

@@ -492,3 +492,90 @@ kbd {
 .tab-icon.bass {
   filter: hue-rotate(190deg) saturate(1.4);
 }
+
+/* Piano keyboard */
+.pianokeys {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 12px 8px;
+}
+.pianokeys svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.pk-key {
+  cursor: pointer;
+  stroke: #0d0f12;
+  stroke-width: 1;
+}
+.pk-key.white {
+  fill: #eceae4;
+}
+.pk-key.black {
+  fill: #1b1d21;
+}
+.pk-key.white.hover {
+  fill: #fff6e0;
+}
+.pk-key.black.hover {
+  fill: #3a3d44;
+}
+.pk-key.onset {
+  fill: var(--accent);
+}
+.pk-key.sustain.white {
+  fill: #e9c98a;
+}
+.pk-key.sustain.black {
+  fill: #7a5a24;
+}
+.pk-key.cursor {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.pk-label {
+  fill: #6b6f78;
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+.pk-middle-c {
+  fill: var(--accent);
+}
+
+/* Piano roll */
+.tl-gutter.piano {
+  width: 44px;
+}
+.tl-gutter.piano .tl-label {
+  font-size: 9px;
+  font-weight: 500;
+  justify-items: end;
+  padding-right: 6px;
+  color: #5d636d;
+}
+.tl-gutter.piano .tl-label.black-key {
+  background: rgba(0, 0, 0, 0.28);
+}
+.tl-gutter.piano .tl-label.octave {
+  color: var(--text);
+  font-weight: 700;
+}
+.tl-gutter.piano .tl-label.active {
+  color: var(--accent);
+}
+.tl-blackkey {
+  fill: #000;
+  opacity: 0.22;
+}
+.tl-octave {
+  stroke: #3a3f48;
+}
+.tl-note.piano {
+  --note: #74c0fc;
+}
+.tl-note .tl-fret.small {
+  font-size: 9px;
+}
