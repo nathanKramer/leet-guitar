@@ -20,6 +20,8 @@ export interface EditorState {
   midiMode: ChannelMode;
   /** Tracks silenced during playback (a local listening choice, not part of the song). */
   mutedTracks: ID[];
+  /** A short message for the status bar (e.g. what a paste had to change); clears itself. */
+  notice: string | null;
 }
 
 export interface Store<T> {

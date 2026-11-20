@@ -36,6 +36,7 @@ export const editor = createStore<EditorState>({
   zoom: 0.2,
   midiMode: 'per-track',
   mutedTracks: [],
+  notice: null,
 });
 
 export const awareness = new Awareness({

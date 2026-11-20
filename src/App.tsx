@@ -54,6 +54,11 @@ export default function App() {
           <span>
             Cursor <b>{position(ed.cursor, song.meta.beatsPerBar, song.meta.beatUnit)}</b>
           </span>
+          {ed.notice && (
+            <span className="notice" role="status">
+              {ed.notice}
+            </span>
+          )}
           <span>
             {sel.length ? (
               <>

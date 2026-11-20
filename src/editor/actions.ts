@@ -2,10 +2,23 @@
 import * as cmd from '../model/commands';
 import { durationTicks, type BaseDuration } from '../model/durations';
 import { TRACK_KINDS } from '../model/instruments';
+import type { Clip } from '../model/transfer';
 import type { ID, TrackKind } from '../model/types';
 import { docStore, editor, player } from '../session';
 
-let clipboard: cmd.ClipNote[] = [];
+let clipboard: Clip | null = null;
+
+const NOTICE_MS = 5000;
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Show a short message in the status bar. */
+export function notify(message: string) {
+  clearTimeout(noticeTimer);
+  editor.set({ notice: message });
+  noticeTimer = setTimeout(() => editor.set({ notice: null }), NOTICE_MS);
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const song = () => docStore.getSong();
 const ed = () => editor.get();
@@ -113,12 +126,27 @@ export function cut() {
 }
 
 export function paste() {
-  if (!clipboard.length) return;
+  if (!clipboard?.notes.length) return;
   const s = ed();
-  const { ops, ids } = cmd.pasteNotes(song(), clipboard, s.trackId, s.cursor);
+  const target = song().tracks[s.trackId];
+  if (!target) return;
+  const { ops, ids, placement } = cmd.pasteNotes(song(), clipboard, s.trackId, s.cursor);
+  if (placement.refused) {
+    notify(
+      clipboard.kind === 'drums'
+        ? `Drum hits can only be pasted into a drum track.`
+        : `Pitched notes can't be pasted into a drum track.`,
+    );
+    return;
+  }
   docStore.transact(ops);
-  const end = Math.max(...clipboard.map((c) => c.offset + c.duration));
+  const end = Math.max(...clipboard.notes.map((c) => c.offset + c.duration));
   editor.set({ selection: ids, cursor: s.cursor + end });
+  const changes = [
+    placement.octaveShifted && `${plural(placement.octaveShifted, 'note')} moved by an octave to fit ${target.name}`,
+    placement.dropped && `${plural(placement.dropped, 'note')} left out (no room for ${placement.dropped === 1 ? 'it' : 'them'})`,
+  ].filter(Boolean);
+  if (changes.length) notify(`Pasted ${plural(ids.length, 'note')}: ${changes.join('; ')}.`);
 }
 
 export function togglePlay() {
@@ -189,4 +217,18 @@ export function shiftSelection(shift: cmd.NoteShift) {
 /** Sound a pitch on a track without changing anything (e.g. while dragging a note). */
 export function audition(trackId: ID, pitch: number) {
   player.preview(song(), trackId, pitch);
+}
+
+/** Retune the active guitar/bass track; reports notes that had to move or go because a string was removed. */
+export function setTuning(trackId: ID, tuning: number[]) {
+  const { ops, moved, removed } = cmd.setTuning(song(), trackId, tuning);
+  if (!ops.length) return;
+  docStore.transact(ops);
+  const track = song().tracks[trackId];
+  if (track) editor.set((s) => ({ cursorString: Math.min(s.cursorString, track.tuning.length - 1) }));
+  const parts = [
+    moved && `${plural(moved, 'note')} moved to another string`,
+    removed && `${plural(removed, 'note')} removed (no other string could play ${removed === 1 ? 'it' : 'them'})`,
+  ].filter(Boolean);
+  if (parts.length) notify(`Removed a string: ${parts.join('; ')}.`);
 }

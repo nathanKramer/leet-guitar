@@ -2,9 +2,10 @@ import { useState } from 'react';
 import * as act from '../editor/actions';
 import type { EditorState } from '../editor/editorStore';
 import { setTrackProgram, sortedTracks } from '../model/commands';
-import { TRACK_KIND_ORDER, TRACK_KINDS } from '../model/instruments';
+import { isStringed, TRACK_KIND_ORDER, TRACK_KINDS } from '../model/instruments';
 import { docStore } from '../session';
 import type { Song, TrackKind } from '../model/types';
+import { TuningPicker } from './TuningPicker';
 
 const TAB_ICONS: Record<TrackKind, string> = { guitar: '🎸', bass: '🎸', piano: '🎹', drums: '🥁' };
 
@@ -60,6 +61,7 @@ export function TrackBar({ song, ed }: { song: Song; ed: EditorState }) {
                 )}
               </select>
             )}
+            {active && isStringed(t.kind) && <TuningPicker track={t} />}
             <button
               className={muted ? 'tab-btn on' : 'tab-btn'}
               onClick={() => act.toggleMute(t.id)}

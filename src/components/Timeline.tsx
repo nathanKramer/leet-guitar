@@ -292,7 +292,7 @@ export function Timeline({ song, ed, peers }: Props) {
             const fret = moving ? n.fret + shift.frets : n.fret;
             const { x, w, y } = chipRect(n, start, lane);
             const triplet = describeDuration(n.duration)?.triplet;
-            const color = piano ? 'piano' : `s${lane % 6}`;
+            const color = piano ? 'piano' : `s${lane % 8}`;
             const cls = ['tl-note', color, selected.has(n.id) ? 'selected' : '', moving ? 'dragging' : ''].join(' ');
             const label = piano
               ? w >= 30

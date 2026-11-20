@@ -24,9 +24,21 @@ npm run build
 - `←/→` cursor · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
   `Alt+↑/↓` move notes to the adjacent string at the same pitch · `Space` play · `Del` delete ·
   `Ctrl+Z / Ctrl+Shift+Z` undo/redo · `Ctrl+A/C/X/V` select all, copy, cut, paste at the cursor.
+- **Copying between instruments**: copied notes keep their real pitch, so you can paste them into a different kind
+  of track. Into the same instrument with the same tuning, the fingering is kept as-is. Into piano, each note goes on
+  its key. Into guitar or bass, strings and frets are chosen for you: chord shapes stay compact, and a passage is
+  kept in one hand position where possible (e.g. piano C–Am–F–G voicings become the usual open and barre chords).
+  Notes outside the instrument's range move by octaves, chords with more notes than strings lose inner voices, and
+  the status bar says when either happened. Drum hits and pitched notes don't paste into each other.
 - **Tracks**: add guitar, bass, piano or drum tracks from the tab bar. Bass tracks are 4-string (E A D G), 24 frets, and
   work exactly like guitar tracks: fretboard, typed frets, moving notes between strings at the same pitch. Double-click a tab to rename it; **M** mutes it during
   playback (just for you, not saved in the song); **×** deletes it along with its notes (undoable).
+- **Tunings**: the tuning button on an active guitar or bass tab (e.g. **E Std**) opens presets — 6-string
+  (Standard, E♭/D/C/B Standard, Drop D/C/B, DADGAD, Open G, Open D), 7-string (Standard B, Drop A, A Standard) and
+  bass (Standard, Drop D, D Standard, 5-string B) — or set each string a semitone at a time and add or remove a low
+  string (4–8 strings) for a custom tuning. Retuning keeps every note's string and fret, like retuning a real
+  instrument, so the tab stays the same and the pitches follow. Notes on a removed string move to another string at
+  the same pitch where possible; the status bar reports any that couldn't.
 - **Piano**: a piano track swaps the fretboard for a clickable 88-key keyboard (Shift-click to stack chords), and
   the timeline becomes a piano roll that sizes itself to the range you're using (at least two octaves). Click an empty
   cell in the roll to add a note there. `↑/↓` moves the cursor a key, `Alt+↑/↓` moves selected notes a semitone and
@@ -68,6 +80,8 @@ src/model/      Pure document model — no DOM, no React
   drums.ts        Default kit (General MIDI drum notes) and lane names
   instruments.ts  Per track kind (guitar / bass / piano / drums): default lanes, frets, instrument choices
   lanes.ts        Which lanes the timeline shows (piano roll range)
+  transfer.ts     Pasting across instruments: pitch → lane/fret, guitar/bass fingering search
+  tunings.ts      Tuning presets (6/7-string guitar, 4/5-string bass) and names
 src/sync/       Transport and persistence
   provider.ts     SyncProvider interface + message types
   broadcastChannel.ts  Cross-tab provider (ops, snapshot handshake, presence)

@@ -3,7 +3,9 @@
  * nothing here mutates state, so commands are easy to test and to run on a server.
  */
 import type { Op } from './crdt';
+import { notePitch } from './drums';
 import { isStringed, TRACK_KINDS } from './instruments';
+import { placeClip, type Clip, type Placement } from './transfer';
 import { newId } from './id';
 import { META_ID } from './materialize';
 import type { ID, Note, Song, SongMeta, Track, TrackKind } from './types';
@@ -54,6 +56,46 @@ export function deleteTrack(song: Song, id: ID): Op[] {
 /** General MIDI program: the instrument sound, or the kit on a drum track. */
 export function setTrackProgram(id: ID, program: number): Op[] {
   return [{ t: 'patch', coll: 'tracks', id, patch: { program } }];
+}
+
+/**
+ * Retune a guitar or bass track (string count may change). Like retuning a real instrument, notes keep
+ * their string and fret, so the tab reads the same and the pitches follow the new tuning. Notes on strings
+ * that no longer exist move to another string at the same pitch where there's room; otherwise they're removed.
+ */
+export function setTuning(song: Song, trackId: ID, tuning: number[]): { ops: Op[]; moved: number; removed: number } {
+  const track = song.tracks[trackId];
+  if (!track || !isStringed(track.kind) || !tuning.length) return { ops: [], moved: 0, removed: 0 };
+  const ops: Op[] = [{ t: 'patch', coll: 'tracks', id: trackId, patch: { tuning: [...tuning] } }];
+  const notes = notesInTrack(song, trackId);
+  const stranded = notes.filter((n) => n.string >= tuning.length).sort((a, b) => a.start - b.start);
+  // Time spans already taken on each remaining string.
+  const taken = tuning.map((_, s) =>
+    notes.filter((n) => n.string === s).map((n) => [n.start, n.start + n.duration] as const),
+  );
+  let moved = 0;
+  let removed = 0;
+  for (const n of stranded) {
+    const pitch = notePitch(track, n);
+    const end = n.start + n.duration;
+    // Prefer the lowest remaining string: closest to where the note was.
+    let placed = false;
+    for (let s = tuning.length - 1; s >= 0 && !placed; s--) {
+      const fret = pitch - tuning[s];
+      const free = taken[s].every(([a, b]) => b <= n.start || a >= end);
+      if (fret >= 0 && fret <= track.frets && free) {
+        ops.push(patchNote(n.id, { string: s, fret }));
+        taken[s].push([n.start, end]);
+        moved++;
+        placed = true;
+      }
+    }
+    if (!placed) {
+      ops.push({ t: 'del', coll: 'notes', id: n.id });
+      removed++;
+    }
+  }
+  return { ops, moved, removed };
 }
 
 export function renameTrack(id: ID, name: string): Op[] {
@@ -195,30 +237,44 @@ export function moveToString(song: Song, ids: ID[], delta: number): Op[] {
   return ops;
 }
 
-export interface ClipNote {
-  string: number;
-  fret: number;
-  offset: number;
-  duration: number;
-  velocity: number;
-}
-
-export function copyNotes(song: Song, ids: ID[]): ClipNote[] {
+/** Copy notes with their real pitches, so they can be pasted onto any kind of track. */
+export function copyNotes(song: Song, ids: ID[]): Clip | null {
   const notes = ids.map((id) => song.notes[id]).filter(Boolean);
-  if (!notes.length) return [];
+  const track = notes[0] && song.tracks[notes[0].trackId];
+  if (!track) return null;
   const min = Math.min(...notes.map((n) => n.start));
-  return notes.map((n) => ({
-    string: n.string,
-    fret: n.fret,
-    offset: n.start - min,
-    duration: n.duration,
-    velocity: n.velocity,
-  }));
+  return {
+    kind: track.kind,
+    tuning: track.tuning,
+    notes: notes
+      .filter((n) => song.tracks[n.trackId])
+      .map((n) => ({
+        pitch: notePitch(song.tracks[n.trackId], n),
+        string: n.string,
+        fret: n.fret,
+        offset: n.start - min,
+        duration: n.duration,
+        velocity: n.velocity,
+      })),
+  };
 }
 
-export function pasteNotes(song: Song, clip: ClipNote[], trackId: ID, at: number): { ops: Op[]; ids: ID[] } {
+/**
+ * Paste a clip at a tick on a track. Notes are re-placed for the target instrument by pitch
+ * (see placeClip); the placement report says what had to be moved or left out.
+ */
+export function pasteNotes(
+  song: Song,
+  clip: Clip,
+  trackId: ID,
+  at: number,
+): { ops: Op[]; ids: ID[]; placement: Placement } {
+  const track = song.tracks[trackId];
+  const placement: Placement = track
+    ? placeClip(clip, track)
+    : { notes: [], octaveShifted: 0, dropped: clip.notes.length, refused: false };
   const ids: ID[] = [];
-  const ops = clip.flatMap((c) => {
+  const ops = placement.notes.flatMap((c) => {
     const id = newId();
     ids.push(id);
     const note: NoteInput = {
@@ -234,7 +290,7 @@ export function pasteNotes(song: Song, clip: ClipNote[], trackId: ID, at: number
       put('notes', id, { ...note }),
     ];
   });
-  return { ops, ids };
+  return { ops, ids, placement };
 }
 
 export function notesInTrack(song: Song, trackId: ID): Note[] {

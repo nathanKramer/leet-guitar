@@ -14,6 +14,8 @@
   --s3: #69db7c;
   --s4: #4dabf7;
   --s5: #b197fc;
+  --s6: #f783ac;
+  --s7: #66d9e8;
   color-scheme: dark;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 14px;
@@ -334,6 +336,8 @@ main {
 .tl-note.s3 { --note: var(--s3); }
 .tl-note.s4 { --note: var(--s4); }
 .tl-note.s5 { --note: var(--s5); }
+.tl-note.s6 { --note: var(--s6); }
+.tl-note.s7 { --note: var(--s7); }
 
 /* Status bar */
 .statusbar {
@@ -380,7 +384,9 @@ kbd {
   border-color: var(--accent);
   box-shadow: inset 0 -2px 0 var(--accent);
 }
-.track-tab button {
+/* The tab's own buttons are flat; buttons inside the tuning popover keep the normal style. */
+.track-tab > button,
+.track-tab .tuning-btn {
   border: none;
   background: transparent;
   height: 28px;
@@ -585,4 +591,73 @@ kbd {
 .tl-note.dragging rect {
   fill-opacity: 0.75;
   stroke-dasharray: 3 2;
+}
+
+.statusbar .notice {
+  color: var(--accent);
+}
+
+/* Tuning picker */
+.tuning {
+  position: relative;
+}
+.track-tab .tuning-btn {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tuning-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.tuning-pop .field select {
+  flex: 1;
+  min-width: 0;
+}
+.tuning-strings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tuning-row {
+  display: grid;
+  grid-template-columns: 20px 30px 1fr 30px;
+  align-items: center;
+  gap: 6px;
+}
+.tuning-row button {
+  height: 26px;
+  padding: 0;
+}
+.tuning-index {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+.tuning-note {
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tuning-actions {
+  display: flex;
+  gap: 6px;
+}
+.tuning-actions button {
+  flex: 1;
+}
+.tuning-note-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
