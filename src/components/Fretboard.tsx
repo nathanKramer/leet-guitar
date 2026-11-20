@@ -41,7 +41,7 @@ export function Fretboard({ song, ed }: Props) {
     return { N, boardStart, wireX, cellLeft, cellRight, centerX, strings, stringY, boardH };
   }, [track]);
 
-  if (!track || !geom) return null;
+  if (!track || !geom || track.kind !== 'guitar') return null;
   const { N, boardStart, wireX, cellLeft, cellRight, centerX, strings, stringY, boardH } = geom;
   const height = boardH + LABEL_H;
 

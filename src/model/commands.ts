@@ -3,10 +3,11 @@
  * nothing here mutates state, so commands are easy to test and to run on a server.
  */
 import type { Op } from './crdt';
+import { DRUM_KIT } from './drums';
 import { newId } from './id';
 import { META_ID } from './materialize';
 import { STANDARD_TUNING } from './music';
-import type { ID, Note, Song, SongMeta, Track } from './types';
+import type { ID, Note, Song, SongMeta, Track, TrackKind } from './types';
 
 export const DEFAULT_TRACK_ID = 'track-1';
 
@@ -21,16 +22,45 @@ const patchNote = (id: ID, patch: Partial<Omit<Note, 'id'>>): Op => ({ t: 'patch
 export function initDocument(song: Song): Op[] {
   const ops: Op[] = [];
   if (Object.keys(song.tracks).length === 0) {
-    const track: Omit<Track, 'id'> = {
-      name: 'Guitar',
-      tuning: STANDARD_TUNING,
-      frets: 22,
-      program: 25,
-      order: 0,
-    };
-    ops.push(put('tracks', DEFAULT_TRACK_ID, { ...track }));
+    ops.push(put('tracks', DEFAULT_TRACK_ID, { ...newTrack('guitar', 'Guitar', 0) }));
   }
   return ops;
+}
+
+function newTrack(kind: TrackKind, name: string, order: number): Omit<Track, 'id'> {
+  return kind === 'drums'
+    ? { kind, name, tuning: DRUM_KIT, frets: 0, program: 0, order }
+    : { kind, name, tuning: STANDARD_TUNING, frets: 22, program: 25, order };
+}
+
+export function sortedTracks(song: Song): Track[] {
+  return Object.values(song.tracks).sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1));
+}
+
+export function addTrack(song: Song, kind: TrackKind): { ops: Op[]; id: ID } {
+  const tracks = sortedTracks(song);
+  const sameKind = tracks.filter((t) => t.kind === kind).length;
+  const base = kind === 'drums' ? 'Drums' : 'Guitar';
+  const name = sameKind ? `${base} ${sameKind + 1}` : base;
+  const order = tracks.reduce((m, t) => Math.max(m, t.order), -1) + 1;
+  const id = newId();
+  return { ops: [put('tracks', id, { ...newTrack(kind, name, order) })], id };
+}
+
+/** Removes the track and all of its notes, in one undoable step. */
+export function deleteTrack(song: Song, id: ID): Op[] {
+  const ops: Op[] = deleteNotes(notesInTrack(song, id).map((n) => n.id));
+  ops.push({ t: 'del', coll: 'tracks', id });
+  return ops;
+}
+
+/** General MIDI program: the guitar sound, or the drum kit on a drum track. */
+export function setTrackProgram(id: ID, program: number): Op[] {
+  return [{ t: 'patch', coll: 'tracks', id, patch: { program } }];
+}
+
+export function renameTrack(id: ID, name: string): Op[] {
+  return [{ t: 'patch', coll: 'tracks', id, patch: { name } }];
 }
 
 export function setMeta(patch: Partial<SongMeta>): Op[] {
@@ -104,7 +134,10 @@ export function shiftFrets(song: Song, ids: ID[], delta: number): Op[] {
   return ops;
 }
 
-/** Move notes to an adjacent string while keeping the same pitch. */
+/**
+ * Guitar: move notes to an adjacent string while keeping the same pitch.
+ * Drums: move hits to the adjacent lane (a different kit piece).
+ */
 export function moveToString(song: Song, ids: ID[], direction: -1 | 1): Op[] {
   const ops: Op[] = [];
   const moving = new Set(ids);
@@ -114,7 +147,7 @@ export function moveToString(song: Song, ids: ID[], direction: -1 | 1): Op[] {
     if (!track) continue;
     const s = n.string + direction;
     if (s < 0 || s >= track.tuning.length) continue;
-    const fret = n.fret + track.tuning[n.string] - track.tuning[s];
+    const fret = track.kind === 'drums' ? 0 : n.fret + track.tuning[n.string] - track.tuning[s];
     if (fret < 0 || fret > track.frets) continue;
     ops.push(...clearSpace(song, n.trackId, s, n.start, n.start + n.duration, moving));
     ops.push(patchNote(id, { string: s, fret }));

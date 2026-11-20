@@ -1,6 +1,6 @@
 import { docStore, editor } from '../session';
 import * as act from './actions';
-import type { BaseDuration } from '../model/durations';
+import { stepDuration, type BaseDuration } from '../model/durations';
 
 const DURATION_KEYS: Record<string, BaseDuration> = {
   w: 'whole',
@@ -18,6 +18,11 @@ function enterDigit(d: number) {
   const s = editor.get();
   const track = docStore.getSong().tracks[s.trackId];
   if (!track) return;
+  if (track.kind === 'drums') {
+    // Digits are pads: 1 = top lane. Like typed frets, they don't advance the cursor.
+    if (d >= 1 && d <= track.tuning.length) act.placeNote(d - 1, 0, { advance: false });
+    return;
+  }
   const now = Date.now();
   if (pendingDigit && now - pendingDigit.at < DIGIT_WINDOW_MS && docStore.getSong().notes[pendingDigit.id]) {
     const combined = pendingDigit.value * 10 + d;
@@ -55,6 +60,8 @@ export function handleKeyDown(e: KeyboardEvent) {
     enterDigit(Number(e.key));
   } else if (DURATION_KEYS[key]) {
     act.setDuration(DURATION_KEYS[key]);
+  } else if (e.key === '[' || e.key === ']') {
+    act.setDuration(stepDuration(editor.get().base, e.key === '[' ? 1 : -1));
   } else {
     switch (e.key) {
       case ' ':

@@ -1,7 +1,7 @@
 /** User-level actions shared by the toolbar, fretboard, timeline and keyboard shortcuts. */
 import * as cmd from '../model/commands';
 import { durationTicks, type BaseDuration } from '../model/durations';
-import type { ID } from '../model/types';
+import type { ID, TrackKind } from '../model/types';
 import { docStore, editor, player } from '../session';
 
 let clipboard: cmd.ClipNote[] = [];
@@ -30,7 +30,7 @@ export function placeNote(string: number, fret: number, opts: { advance: boolean
     velocity: 96,
   });
   docStore.transact(ops);
-  player.preview(track.tuning[string] + fret);
+  player.preview(song(), s.trackId, track.tuning[string] + fret);
   // Entry deliberately leaves the selection empty: changing the note value
   // between entries must not resize the note just placed.
   editor.set({
@@ -46,12 +46,20 @@ export function setFret(id: ID, fret: number) {
   const track = n && song().tracks[n.trackId];
   if (!track) return;
   docStore.transact([{ t: 'patch', coll: 'notes', id, patch: { fret } }]);
-  player.preview(track.tuning[n.string] + fret);
+  player.preview(song(), n.trackId, track.tuning[n.string] + fret);
 }
 
 /** Changing the note value also applies it to any selected notes. */
+/** Narrowest spacing (px) between grid steps before the timeline zooms in to keep notes legible. */
+const MIN_STEP_PX = 16;
+
 export function setDuration(base: BaseDuration, triplet = ed().triplet) {
-  editor.set({ base, triplet });
+  const ticks = durationTicks(base, triplet);
+  editor.set((s) => ({
+    base,
+    triplet,
+    zoom: ticks * s.zoom < MIN_STEP_PX ? Math.min(1, MIN_STEP_PX / ticks) : s.zoom,
+  }));
   const sel = liveSelection();
   if (sel.length) docStore.transact(cmd.setDurations(song(), sel, durationTicks(base, triplet)));
 }
@@ -120,6 +128,7 @@ export function togglePlay() {
   player.play(
     song(),
     ed().cursor,
+    ed().mutedTracks,
     (tick) => editor.set({ playhead: tick }),
     () => editor.set({ playing: false, playhead: null }),
   );
@@ -136,4 +145,35 @@ export function undo() {
 
 export function redo() {
   docStore.redo();
+}
+
+export function selectTrack(trackId: ID) {
+  if (trackId === ed().trackId) return;
+  editor.set({ trackId, selection: [], cursorString: 0 });
+}
+
+export function addTrack(kind: TrackKind) {
+  const { ops, id } = cmd.addTrack(song(), kind);
+  docStore.transact(ops);
+  selectTrack(id);
+}
+
+export function deleteTrack(trackId: ID) {
+  const remaining = cmd.sortedTracks(song()).filter((t) => t.id !== trackId);
+  if (!remaining.length) return;
+  if (ed().trackId === trackId) selectTrack(remaining[0].id);
+  docStore.transact(cmd.deleteTrack(song(), trackId));
+}
+
+export function renameTrack(trackId: ID, name: string) {
+  const trimmed = name.trim();
+  if (trimmed) docStore.transact(cmd.renameTrack(trackId, trimmed));
+}
+
+export function toggleMute(trackId: ID) {
+  editor.set((s) => ({
+    mutedTracks: s.mutedTracks.includes(trackId)
+      ? s.mutedTracks.filter((id) => id !== trackId)
+      : [...s.mutedTracks, trackId],
+  }));
 }

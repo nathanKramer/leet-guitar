@@ -1,10 +1,14 @@
 import { useEffect } from 'react';
+import { DrumPads } from './components/DrumPads';
 import { Fretboard } from './components/Fretboard';
 import { Timeline } from './components/Timeline';
 import { Toolbar } from './components/Toolbar';
+import { TrackBar } from './components/TrackBar';
+import { selectTrack } from './editor/actions';
 import { useStore } from './editor/editorStore';
 import { handleKeyDown } from './editor/keyboard';
-import { describeDuration, PPQ } from './model/durations';
+import { sortedTracks } from './model/commands';
+import { describeDuration, DURATION_NAMES, PPQ } from './model/durations';
 import { editor, usePeers, useSong } from './session';
 
 function position(tick: number, beatsPerBar: number, beatUnit: number) {
@@ -25,6 +29,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // The active track can disappear (deleted here, by undo, or by a collaborator).
+  useEffect(() => {
+    if (!song.tracks[ed.trackId]) {
+      const first = sortedTracks(song)[0];
+      if (first) selectTrack(first.id);
+    }
+  }, [song, ed.trackId]);
+
   const sel = ed.selection.map((id) => song.notes[id]).filter(Boolean);
   const selDur = sel.length === 1 ? describeDuration(sel[0].duration) : null;
 
@@ -32,7 +44,9 @@ export default function App() {
     <div className="app">
       <Toolbar song={song} ed={ed} peers={peers} />
       <main>
+        <TrackBar song={song} ed={ed} />
         <Fretboard song={song} ed={ed} />
+        <DrumPads song={song} ed={ed} />
         <Timeline song={song} ed={ed} peers={peers} />
         <footer className="statusbar">
           <span>
@@ -42,17 +56,24 @@ export default function App() {
             {sel.length ? (
               <>
                 {sel.length} selected
-                {selDur && ` · ${selDur.base}${selDur.triplet ? ' triplet' : ''}`}
+                {selDur && ` · ${DURATION_NAMES[selDur.base]}${selDur.triplet ? ' triplet' : ''}`}
               </>
             ) : (
               'No selection'
             )}
           </span>
-          <span className="keys">
-            <kbd>W H Q E S</kbd> note value · <kbd>T</kbd> triplet · <kbd>0-9</kbd> type fret ·{' '}
-            <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± ·{' '}
-            <kbd>Alt ←→↑↓</kbd> move notes · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
-          </span>
+          {song.tracks[ed.trackId]?.kind === 'drums' ? (
+            <span className="keys">
+              <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>1-9</kbd> pads · <kbd>←→</kbd> cursor ·{' '}
+              <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+            </span>
+          ) : (
+            <span className="keys">
+              <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>0-9</kbd> type fret ·{' '}
+              <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± ·{' '}
+              <kbd>Alt ←→↑↓</kbd> move notes · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+            </span>
+          )}
         </footer>
       </main>
     </div>

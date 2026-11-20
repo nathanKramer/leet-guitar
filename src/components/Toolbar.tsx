@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as act from '../editor/actions';
-import type { EditorState } from '../editor/editorStore';
+import { useStore, type EditorState } from '../editor/editorStore';
+import { loadSoundFontFile, removeSoundFont, setSource, sound, type SoundSource } from '../editor/sound';
 import { downloadMidi, type ChannelMode } from '../midi/export';
 import { setMeta } from '../model/commands';
-import { BASE_DURATIONS, DURATION_LABELS } from '../model/durations';
+import { BASE_DURATIONS, DURATION_LABELS, DURATION_NAMES } from '../model/durations';
 import type { Song } from '../model/types';
 import { awareness, docStore, editor } from '../session';
 import type { PeerState } from '../sync/awareness';
 
-const DURATION_KEYS = { whole: 'W', half: 'H', quarter: 'Q', eighth: 'E', sixteenth: 'S' } as const;
+const DURATION_KEYS = { whole: 'W', half: 'H', quarter: 'Q', eighth: 'E', sixteenth: 'S', thirtysecond: '[ / ]' } as const;
 
 /** Text input that commits on blur / Enter, so typing doesn't create an edit per keystroke. */
 function CommitInput(props: {
@@ -102,7 +103,7 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
             key={d}
             className={ed.base === d ? 'seg active' : 'seg'}
             onClick={() => act.setDuration(d)}
-            title={`${d} note (${DURATION_KEYS[d]})`}
+            title={`${DURATION_NAMES[d]} note (${DURATION_KEYS[d]}; [ / ] for shorter / longer)`}
           >
             {DURATION_LABELS[d]}
           </button>
@@ -150,6 +151,8 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
         <button onClick={() => downloadMidi(song, ed.midiMode)}>Export MIDI</button>
       </div>
 
+      <SoundControl />
+
       <div className="group peers" title="People editing this document (open another tab to try it)">
         {[awareness.local, ...peers].map((p) => (
           <span key={p.actor} className="avatar" style={{ background: p.color }} title={p.name}>
@@ -158,5 +161,50 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
         ))}
       </div>
     </header>
+  );
+}
+
+/** Built-in synth vs a SoundFont loaded from disk (local preference, not synced). */
+function SoundControl() {
+  const st = useStore(sound);
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="group sound" title="Playback sound. A SoundFont is loaded from your computer and kept in this browser only.">
+      <label className="field">
+        Sound
+        <select
+          value={st.source}
+          disabled={st.loading}
+          onChange={(e) => setSource(e.target.value as SoundSource)}
+        >
+          <option value="builtin">Built-in synth</option>
+          {st.fontName && <option value="soundfont">{st.fontName}</option>}
+        </select>
+      </label>
+      <button disabled={st.loading} onClick={() => fileRef.current?.click()}>
+        {st.loading ? 'Loading…' : st.fontName ? 'Replace…' : 'Load SoundFont…'}
+      </button>
+      {st.fontName && !st.loading && (
+        <button onClick={() => void removeSoundFont()} title="Remove the SoundFont from this browser">
+          ×
+        </button>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".sf2,.sf3,.dls"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) void loadSoundFontFile(file);
+        }}
+      />
+      {st.error && (
+        <span className="sound-error" role="alert">
+          {st.error}
+        </span>
+      )}
+    </div>
   );
 }

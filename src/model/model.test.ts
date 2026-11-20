@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addNote, DEFAULT_TRACK_ID, initDocument, moveNotes, moveToString, setMeta } from './commands';
 import { applyOp, emptyState, mergeState, type StampedOp } from './crdt';
-import { BASE_TICKS, describeDuration, durationTicks, PPQ } from './durations';
+import { BASE_TICKS, describeDuration, durationTicks, PPQ, stepDuration } from './durations';
 import { materialize } from './materialize';
 import { DocumentStore } from './store';
 
@@ -26,6 +26,16 @@ describe('durations', () => {
     expect(durationTicks('sixteenth', true)).toBe(80);
     expect(durationTicks('quarter', true) * 3).toBe(BASE_TICKS.half);
     expect(durationTicks('eighth', true) * 3).toBe(PPQ);
+    expect(durationTicks('thirtysecond', false)).toBe(60);
+    expect(durationTicks('thirtysecond', true)).toBe(40);
+    expect(durationTicks('thirtysecond', true) * 3).toBe(BASE_TICKS.sixteenth);
+  });
+
+  it('steps between note values, clamped at the ends', () => {
+    expect(stepDuration('sixteenth', 1)).toBe('thirtysecond');
+    expect(stepDuration('thirtysecond', 1)).toBe('thirtysecond');
+    expect(stepDuration('quarter', -1)).toBe('half');
+    expect(stepDuration('whole', -1)).toBe('whole');
   });
 
   it('all durations are whole ticks', () => {
@@ -37,6 +47,7 @@ describe('durations', () => {
   it('describes tick lengths', () => {
     expect(describeDuration(160)).toEqual({ base: 'eighth', triplet: true });
     expect(describeDuration(480)).toEqual({ base: 'quarter', triplet: false });
+    expect(describeDuration(40)).toEqual({ base: 'thirtysecond', triplet: true });
     expect(describeDuration(100)).toBeNull();
   });
 });

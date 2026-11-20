@@ -8,7 +8,7 @@ import { exportMidi, vlq } from './export';
 const song: Song = {
   meta: { title: 'T', bpm: 120, beatsPerBar: 4, beatUnit: 4 },
   tracks: {
-    [DEFAULT_TRACK_ID]: { id: DEFAULT_TRACK_ID, name: 'Gtr', tuning: STANDARD_TUNING, frets: 22, program: 25, order: 0 },
+    [DEFAULT_TRACK_ID]: { id: DEFAULT_TRACK_ID, kind: 'guitar', name: 'Gtr', tuning: STANDARD_TUNING, frets: 22, program: 25, order: 0 },
   },
   notes: {
     a: { id: 'a', trackId: DEFAULT_TRACK_ID, string: 5, fret: 0, start: 0, duration: 160, velocity: 100 },

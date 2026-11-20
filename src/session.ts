@@ -4,6 +4,7 @@
  * different document; tabs open on the same document edit it together.
  */
 import { useSyncExternalStore } from 'react';
+import { BuiltInEngine } from './audio/builtin';
 import { Player } from './audio/player';
 import { createStore, type EditorState } from './editor/editorStore';
 import { DEFAULT_TRACK_ID, initDocument } from './model/commands';
@@ -34,6 +35,7 @@ export const editor = createStore<EditorState>({
   playhead: null,
   zoom: 0.2,
   midiMode: 'per-track',
+  mutedTracks: [],
 });
 
 export const awareness = new Awareness({
@@ -51,7 +53,8 @@ editor.subscribe(() => {
 
 new BroadcastChannelProvider(docId).connect(docStore, awareness);
 
-export const player = new Player();
+export const builtInEngine = new BuiltInEngine();
+export const player = new Player(builtInEngine);
 
 export function useSong() {
   return useSyncExternalStore(docStore.subscribe, docStore.getSong);

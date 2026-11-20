@@ -1,2 +1,7 @@
 node_modules
 dist
+
+# SoundFonts are loaded by the user at runtime, never bundled
+*.sf2
+*.sf3
+*.dls

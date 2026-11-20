@@ -25,6 +25,7 @@ export function readTrack(id: ID, e: Entry | undefined): Track | null {
   const f = e.fields;
   return {
     id,
+    kind: f.kind === 'drums' ? 'drums' : 'guitar',
     name: str(f.name, 'Guitar'),
     tuning: Array.isArray(f.tuning) ? (f.tuning as number[]) : STANDARD_TUNING,
     frets: num(f.frets, 22),

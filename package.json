@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "spessasynth_lib": "4.4.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
@@ -21,5 +22,8 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
+  },
+  "overrides": {
+    "spessasynth_core": "4.4.7"
   }
 }

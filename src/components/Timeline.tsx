@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
-import { moveSelection, stepTicks } from '../editor/actions';
+import { moveSelection, placeNote, stepTicks } from '../editor/actions';
 import { barTicks, beatTicks, describeDuration } from '../model/durations';
-import { stringLabel } from '../model/music';
+import { isCymbal, laneLabel } from '../model/drums';
 import type { ID, Note, Song } from '../model/types';
 import { editor } from '../session';
 import type { PeerState } from '../sync/awareness';
@@ -93,6 +93,7 @@ export function Timeline({ song, ed, peers }: Props) {
   }, [focus, ppt]);
 
   if (!track) return null;
+  const isDrums = track.kind === 'drums';
 
   const onBackgroundDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -131,6 +132,8 @@ export function Timeline({ song, ed, peers }: Props) {
       setMarquee(null);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      // Drum tracks work like a step sequencer: a plain click on an empty cell adds a hit.
+      if (!active && isDrums && !e.shiftKey && s >= 0 && s < strings) placeNote(s, 0, { advance: false });
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -172,14 +175,14 @@ export function Timeline({ song, ed, peers }: Props) {
 
   return (
     <div className="timeline">
-      <div className="tl-gutter" style={{ height }}>
+      <div className={isDrums ? 'tl-gutter drums' : 'tl-gutter'} style={{ height }}>
         {track.tuning.map((_, s) => (
           <div
             key={s}
             className={s === ed.cursorString ? 'tl-label active' : 'tl-label'}
             style={{ top: rowY(s) - ROW_H / 2, height: ROW_H }}
           >
-            {stringLabel(track.tuning, s)}
+            {laneLabel(track, s)}
           </div>
         ))}
       </div>
@@ -208,12 +211,12 @@ export function Timeline({ song, ed, peers }: Props) {
             const start = dragging.has(n.id) ? Math.max(0, n.start + dragDelta) : n.start;
             const { x, w, y } = chipRect(n, start);
             const triplet = describeDuration(n.duration)?.triplet;
-            const cls = ['tl-note', `s${n.string}`, selected.has(n.id) ? 'selected' : ''].join(' ');
+            const cls = ['tl-note', `s${n.string % 6}`, selected.has(n.id) ? 'selected' : ''].join(' ');
             return (
               <g key={n.id} className={cls} onMouseDown={(e) => onNoteDown(e, n.id)}>
                 <rect x={x} y={y} width={w} height={CHIP_H} rx={4} />
                 <text x={x + 5} y={y + 14} className="tl-fret">
-                  {n.fret}
+                  {isDrums ? (isCymbal(track.tuning[n.string]) ? '×' : '●') : n.fret}
                 </text>
                 {triplet && w > 22 && (
                   <text x={x + w - 4} y={y + 8} className="tl-tuplet">

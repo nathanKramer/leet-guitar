@@ -1,5 +1,7 @@
 /** Standard MIDI File (format 1) writer. */
+import { sortedTracks } from '../model/commands';
 import { PPQ } from '../model/durations';
+import { DRUM_CHANNEL, stringChannels, trackChannels } from './channels';
 import type { Song } from '../model/types';
 
 export type ChannelMode =
@@ -49,14 +51,9 @@ function trackChunk(events: TimedEvent[]): number[] {
   return chunk('MTrk', data);
 }
 
-/** Skip channel 10 (index 9), which General MIDI reserves for drums. */
-function channelFor(index: number): number {
-  const ch = index % 15;
-  return ch >= 9 ? ch + 1 : ch;
-}
-
 export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Array {
-  const tracks = Object.values(song.tracks).sort((a, b) => a.order - b.order);
+  const tracks = sortedTracks(song);
+  const trackChannel = trackChannels(song);
   const { meta } = song;
 
   const tempo = Math.round(60_000_000 / meta.bpm);
@@ -71,12 +68,18 @@ export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Ar
   ];
   const chunks = [trackChunk(conductor)];
 
-  tracks.forEach((track, ti) => {
+  for (const track of tracks) {
     const events: TimedEvent[] = [{ tick: 0, order: 0, bytes: metaEvent(0x03, ascii(track.name)) }];
+    const drums = track.kind === 'drums';
     const channels =
-      mode === 'per-string' ? track.tuning.map((_, s) => channelFor(s)) : track.tuning.map(() => channelFor(ti));
-    for (const ch of new Set(channels)) {
-      events.push({ tick: 0, order: 0, bytes: [0xc0 | ch, track.program & 0x7f] });
+      !drums && mode === 'per-string'
+        ? stringChannels(track)
+        : track.tuning.map(() => trackChannel.get(track.id) ?? DRUM_CHANNEL);
+    // Drums: program change on channel 10 selects the kit (GS convention); the standard kit needs none.
+    if (!drums || track.program !== 0) {
+      for (const ch of new Set(channels)) {
+        events.push({ tick: 0, order: 0, bytes: [0xc0 | ch, track.program & 0x7f] });
+      }
     }
     for (const n of Object.values(song.notes)) {
       if (n.trackId !== track.id) continue;
@@ -87,7 +90,7 @@ export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Ar
       events.push({ tick: n.start + n.duration, order: 1, bytes: [0x80 | ch, pitch, 0] });
     }
     chunks.push(trackChunk(events));
-  });
+  }
 
   const header = chunk('MThd', [...u16(1), ...u16(chunks.length), ...u16(PPQ)]);
   return new Uint8Array([...header, ...chunks.flat()]);

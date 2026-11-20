@@ -1,110 +1,92 @@
 import { ticksToSeconds } from '../model/durations';
-import { midiToFrequency } from '../model/music';
-import type { Song } from '../model/types';
+import { notePitch } from '../model/drums';
+import type { ID, Note, Song } from '../model/types';
+import { audio } from './context';
+import type { SoundEngine } from './engine';
 
-/** Karplus-Strong plucked string, rendered once per pitch and cached. */
-class GuitarSynth {
-  private ctx?: AudioContext;
-  private master?: GainNode;
-  private cache = new Map<number, { buffer: AudioBuffer; rate: number }>();
+/** How far ahead notes are handed to the engine, and how often the scheduler runs. */
+export const LOOKAHEAD_S = 0.2;
+const TICK_MS = 25;
 
-  context(): AudioContext {
-    if (!this.ctx) {
-      this.ctx = new AudioContext();
-      const comp = this.ctx.createDynamicsCompressor();
-      this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
-      this.master.connect(comp).connect(this.ctx.destination);
-    }
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
-    return this.ctx;
-  }
-
-  private voice(midi: number) {
-    const hit = this.cache.get(midi);
-    if (hit) return hit;
-    const ctx = this.context();
-    const sr = ctx.sampleRate;
-    const freq = midiToFrequency(midi);
-    // The two-point average adds half a sample of delay; the leftover fractional
-    // error is corrected with playbackRate so every pitch is in tune.
-    const period = Math.max(2, Math.round(sr / freq - 0.5));
-    const rate = (freq * (period + 0.5)) / sr;
-    const length = Math.floor(sr * 3);
-    const buffer = ctx.createBuffer(1, length, sr);
-    const out = buffer.getChannelData(0);
-    const ring = new Float32Array(period);
-    let prev = 0;
-    for (let i = 0; i < period; i++) {
-      // Slightly low-passed noise burst = softer pick attack.
-      const r = Math.random() * 2 - 1;
-      ring[i] = (r + prev) * 0.5;
-      prev = r;
-    }
-    const decay = 0.996;
-    let idx = 0;
-    for (let i = 0; i < length; i++) {
-      const next = (idx + 1) % period;
-      out[i] = ring[idx];
-      ring[idx] = (ring[idx] + ring[next]) * 0.5 * decay;
-      idx = next;
-    }
-    const v = { buffer, rate };
-    this.cache.set(midi, v);
-    return v;
-  }
-
-  play(midi: number, when: number, duration: number, velocity = 96): AudioBufferSourceNode {
-    const ctx = this.context();
-    const { buffer, rate } = this.voice(midi);
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    src.playbackRate.value = rate;
-    const gain = ctx.createGain();
-    const level = (velocity / 127) * 0.9;
-    const release = 0.05;
-    gain.gain.setValueAtTime(level, when);
-    gain.gain.setValueAtTime(level, when + duration);
-    gain.gain.linearRampToValueAtTime(0, when + duration + release);
-    src.connect(gain).connect(this.master!);
-    src.start(when);
-    src.stop(when + duration + release + 0.01);
-    return src;
-  }
+/**
+ * Index of the first note at or after `horizonTick`. Notes before it (from `from`) are due for scheduling.
+ * `notes` must be sorted by start.
+ */
+export function dueUntil(notes: Note[], from: number, horizonTick: number): number {
+  let i = from;
+  while (i < notes.length && notes[i].start < horizonTick) i++;
+  return i;
 }
 
+/**
+ * Owns playback timing. Notes are handed to the current engine a short window ahead of time
+ * (rather than all at once) so that stopping is immediate for every engine.
+ */
 export class Player {
-  private synth = new GuitarSynth();
-  private sources: AudioBufferSourceNode[] = [];
+  private engine: SoundEngine;
   private raf = 0;
+  private timer: ReturnType<typeof setInterval> | undefined;
+  private onEnd: (() => void) | undefined;
+  private active = false;
 
-  /** Short audition when placing a note. */
-  preview(midi: number) {
-    const ctx = this.synth.context();
-    this.synth.play(midi, ctx.currentTime + 0.01, 0.6);
+  constructor(engine: SoundEngine) {
+    this.engine = engine;
   }
 
-  play(song: Song, fromTick: number, onTick: (tick: number) => void, onEnd: () => void) {
+  /** Switch engines. The caller owns engine lifetimes (a loaded SoundFont outlives switching away). */
+  setEngine(engine: SoundEngine) {
+    if (engine === this.engine) return;
     this.stop();
-    const ctx = this.synth.context();
+    this.engine = engine;
+  }
+
+  preview(song: Song, trackId: ID, pitch: number) {
+    const track = song.tracks[trackId];
+    if (track) this.engine.preview(song, track, pitch);
+  }
+
+  async play(song: Song, fromTick: number, muted: ID[], onTick: (tick: number) => void, onEnd: () => void) {
+    this.stop();
+    this.active = true;
+    this.onEnd = onEnd;
+    const engine = this.engine;
+    await engine.prepare(song);
+    if (this.onEnd !== onEnd) return; // stopped or restarted while preparing
+
+    const { ctx } = audio();
     const bpm = song.meta.bpm;
-    const t0 = ctx.currentTime + 0.08;
-    let endTick = fromTick;
-    for (const n of Object.values(song.notes)) {
-      if (n.start < fromTick) continue;
-      const track = song.tracks[n.trackId];
-      if (!track) continue;
-      const pitch = track.tuning[n.string] + n.fret;
-      const when = t0 + ticksToSeconds(n.start - fromTick, bpm);
-      this.sources.push(this.synth.play(pitch, when, ticksToSeconds(n.duration, bpm), n.velocity));
-      endTick = Math.max(endTick, n.start + n.duration);
-    }
     const secondsPerTick = ticksToSeconds(1, bpm);
+    const t0 = ctx.currentTime + 0.08;
+    const mutedSet = new Set(muted);
+    const notes = Object.values(song.notes)
+      .filter((n) => n.start >= fromTick && song.tracks[n.trackId])
+      .sort((a, b) => a.start - b.start);
+    const endTick = notes.reduce((m, n) => Math.max(m, n.start + n.duration), fromTick);
+    const tickAt = (time: number) => fromTick + (time - t0) / secondsPerTick;
+
+    let next = 0;
+    const schedule = () => {
+      const due = dueUntil(notes, next, tickAt(ctx.currentTime + LOOKAHEAD_S));
+      for (; next < due; next++) {
+        const n = notes[next];
+        if (mutedSet.has(n.trackId)) continue;
+        const track = song.tracks[n.trackId];
+        engine.playNote(
+          track,
+          notePitch(track, n),
+          t0 + (n.start - fromTick) * secondsPerTick,
+          n.duration * secondsPerTick,
+          n.velocity,
+        );
+      }
+    };
+    schedule();
+    this.timer = setInterval(schedule, TICK_MS);
+
     const frame = () => {
-      const tick = fromTick + Math.max(0, ctx.currentTime - t0) / secondsPerTick;
+      const tick = Math.max(fromTick, tickAt(ctx.currentTime));
       if (tick >= endTick) {
-        this.stop();
-        onEnd();
+        this.finish();
         return;
       }
       onTick(tick);
@@ -113,15 +95,25 @@ export class Player {
     this.raf = requestAnimationFrame(frame);
   }
 
+  /** Ends playback and reports it (used when the song runs out). */
+  private finish() {
+    const cb = this.onEnd;
+    this.halt();
+    cb?.();
+  }
+
+  /** Stops playback. Only silences the engine if something was playing (silencing can mute briefly). */
   stop() {
+    const wasActive = this.active;
+    this.halt();
+    if (wasActive) this.engine.stopAll();
+  }
+
+  private halt() {
+    this.active = false;
     cancelAnimationFrame(this.raf);
-    for (const s of this.sources) {
-      try {
-        s.stop();
-      } catch {
-        /* already stopped */
-      }
-    }
-    this.sources = [];
+    clearInterval(this.timer);
+    this.timer = undefined;
+    this.onEnd = undefined;
   }
 }

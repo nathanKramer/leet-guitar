@@ -18,6 +18,8 @@ export interface EditorState {
   /** Pixels per tick in the timeline. */
   zoom: number;
   midiMode: ChannelMode;
+  /** Tracks silenced during playback (a local listening choice, not part of the song). */
+  mutedTracks: ID[];
 }
 
 export interface Store<T> {
