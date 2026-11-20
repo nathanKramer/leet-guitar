@@ -8,14 +8,14 @@ export interface SongMeta {
   beatUnit: number;
 }
 
-export type TrackKind = 'guitar' | 'drums';
+export type TrackKind = 'guitar' | 'bass' | 'drums';
 
 export interface Track {
   id: ID;
   kind: TrackKind;
   name: string;
   /**
-   * MIDI pitch of each lane. Guitar: open strings, index 0 = highest-pitched string (tab order).
+   * MIDI pitch of each lane. Guitar/bass: open strings, index 0 = highest-pitched string (tab order).
    * Drums: General MIDI drum notes, one lane per kit piece, top to bottom.
    * Either way a note's pitch is `tuning[note.string] + note.fret`.
    */

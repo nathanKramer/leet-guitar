@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { exportMidi } from '../midi/export';
 import { addNote, addTrack, DEFAULT_TRACK_ID, deleteTrack, initDocument, moveToString, sortedTracks } from './commands';
-import { DRUM_KIT } from './drums';
+import { DRUM_KIT, laneLabel } from './drums';
+import { STANDARD_BASS_TUNING } from './music';
 import { DocumentStore } from './store';
 
 function newStore() {
@@ -69,5 +70,28 @@ describe('tracks', () => {
     const noteOn = bytes.findIndex((b, i) => b === 0x99 && bytes[i + 1] === 36);
     expect(noteOn).toBeGreaterThan(0);
     expect(bytes).not.toContain(0xc9);
+  });
+
+  it('adds a 4-string bass track with bass defaults', () => {
+    const s = newStore();
+    const { ops, id } = addTrack(s.getSong(), 'bass');
+    s.transact(ops);
+    const bass = s.getSong().tracks[id];
+    expect(bass).toMatchObject({ kind: 'bass', name: 'Bass', tuning: STANDARD_BASS_TUNING, frets: 24, program: 33 });
+    expect(bass.tuning.map((_, i) => laneLabel(bass, i))).toEqual(['G', 'D', 'A', 'E']);
+  });
+
+  it('moves bass notes across strings keeping pitch, and exports them with the bass program', () => {
+    const s = newStore();
+    const { ops, id } = addTrack(s.getSong(), 'bass');
+    s.transact(ops);
+    const n = addNote(s.getSong(), { trackId: id, string: 3, fret: 7, start: 0, duration: 480, velocity: 100 }); // B1
+    s.transact(n.ops);
+    s.transact(moveToString(s.getSong(), [n.id], -1));
+    expect(s.getSong().notes[n.id]).toMatchObject({ string: 2, fret: 2 }); // A string, fret 2 = B1
+    const bytes = [...exportMidi(s.getSong())];
+    const ch = 1; // second track, first melodic channel after the guitar
+    expect(bytes.some((b, i) => b === (0xc0 | ch) && bytes[i + 1] === 33)).toBe(true);
+    expect(bytes.some((b, i) => b === (0x90 | ch) && bytes[i + 1] === 35)).toBe(true);
   });
 });

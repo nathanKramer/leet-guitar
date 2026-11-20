@@ -3,10 +3,9 @@
  * nothing here mutates state, so commands are easy to test and to run on a server.
  */
 import type { Op } from './crdt';
-import { DRUM_KIT } from './drums';
+import { TRACK_KINDS } from './instruments';
 import { newId } from './id';
 import { META_ID } from './materialize';
-import { STANDARD_TUNING } from './music';
 import type { ID, Note, Song, SongMeta, Track, TrackKind } from './types';
 
 export const DEFAULT_TRACK_ID = 'track-1';
@@ -28,9 +27,7 @@ export function initDocument(song: Song): Op[] {
 }
 
 function newTrack(kind: TrackKind, name: string, order: number): Omit<Track, 'id'> {
-  return kind === 'drums'
-    ? { kind, name, tuning: DRUM_KIT, frets: 0, program: 0, order }
-    : { kind, name, tuning: STANDARD_TUNING, frets: 22, program: 25, order };
+  return { kind, name, order, ...TRACK_KINDS[kind].defaults };
 }
 
 export function sortedTracks(song: Song): Track[] {
@@ -40,7 +37,7 @@ export function sortedTracks(song: Song): Track[] {
 export function addTrack(song: Song, kind: TrackKind): { ops: Op[]; id: ID } {
   const tracks = sortedTracks(song);
   const sameKind = tracks.filter((t) => t.kind === kind).length;
-  const base = kind === 'drums' ? 'Drums' : 'Guitar';
+  const base = TRACK_KINDS[kind].label;
   const name = sameKind ? `${base} ${sameKind + 1}` : base;
   const order = tracks.reduce((m, t) => Math.max(m, t.order), -1) + 1;
   const id = newId();
@@ -54,7 +51,7 @@ export function deleteTrack(song: Song, id: ID): Op[] {
   return ops;
 }
 
-/** General MIDI program: the guitar sound, or the drum kit on a drum track. */
+/** General MIDI program: the instrument sound, or the kit on a drum track. */
 export function setTrackProgram(id: ID, program: number): Op[] {
   return [{ t: 'patch', coll: 'tracks', id, patch: { program } }];
 }
@@ -135,7 +132,7 @@ export function shiftFrets(song: Song, ids: ID[], delta: number): Op[] {
 }
 
 /**
- * Guitar: move notes to an adjacent string while keeping the same pitch.
+ * Guitar/bass: move notes to an adjacent string while keeping the same pitch.
  * Drums: move hits to the adjacent lane (a different kit piece).
  */
 export function moveToString(song: Song, ids: ID[], direction: -1 | 1): Op[] {

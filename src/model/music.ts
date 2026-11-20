@@ -3,6 +3,9 @@ const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 /** Standard tuning, high E first (tab order). */
 export const STANDARD_TUNING = [64, 59, 55, 50, 45, 40];
 
+/** Standard 4-string bass tuning (G2 D2 A1 E1), highest first. */
+export const STANDARD_BASS_TUNING = [43, 38, 33, 28];
+
 export function pitchClassName(midi: number): string {
   return NAMES[((midi % 12) + 12) % 12];
 }

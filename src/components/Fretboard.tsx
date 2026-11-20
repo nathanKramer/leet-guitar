@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
 import { placeNote } from '../editor/actions';
-import { pitchClassName, pitchName, stringLabel } from '../model/music';
+import { laneLabel } from '../model/drums';
+import { isStringed } from '../model/instruments';
+import { pitchClassName, pitchName } from '../model/music';
 import type { Song } from '../model/types';
 
 const W = 1200;
@@ -41,7 +43,7 @@ export function Fretboard({ song, ed }: Props) {
     return { N, boardStart, wireX, cellLeft, cellRight, centerX, strings, stringY, boardH };
   }, [track]);
 
-  if (!track || !geom || track.kind !== 'guitar') return null;
+  if (!track || !geom || !isStringed(track.kind)) return null;
   const { N, boardStart, wireX, cellLeft, cellRight, centerX, strings, stringY, boardH } = geom;
   const height = boardH + LABEL_H;
 
@@ -52,7 +54,9 @@ export function Fretboard({ song, ed }: Props) {
   );
   const selected = new Set(ed.selection);
 
-  const midY = (stringY(Math.floor((strings - 1) / 2)) + stringY(Math.ceil((strings - 1) / 2))) / 2;
+  // Inlays sit in the middle of the neck; double dots one string-gap either side (works for 4 or 6 strings).
+  const midY = (stringY(0) + stringY(strings - 1)) / 2;
+  const bass = track.kind === 'bass';
 
   return (
     <div className="fretboard">
@@ -74,8 +78,8 @@ export function Fretboard({ song, ed }: Props) {
         ))}
         {DOUBLE_INLAYS.filter((f) => f <= N).map((f) => (
           <g key={f}>
-            <circle cx={centerX(f)} cy={(stringY(1) + stringY(2)) / 2} r={6} className="fb-inlay" />
-            <circle cx={centerX(f)} cy={(stringY(strings - 3) + stringY(strings - 2)) / 2} r={6} className="fb-inlay" />
+            <circle cx={centerX(f)} cy={midY - SPACING} r={6} className="fb-inlay" />
+            <circle cx={centerX(f)} cy={midY + SPACING} r={6} className="fb-inlay" />
           </g>
         ))}
 
@@ -93,8 +97,8 @@ export function Fretboard({ song, ed }: Props) {
               x2={wireX(N)}
               y1={stringY(s)}
               y2={stringY(s)}
-              className={s >= strings - 3 ? 'fb-string wound' : 'fb-string'}
-              strokeWidth={1 + s * 0.4}
+              className={bass || s >= strings - 3 ? 'fb-string wound' : 'fb-string'}
+              strokeWidth={bass ? 2.2 + s * 0.5 : 1 + s * 0.4}
             />
           </g>
         ))}
@@ -150,7 +154,7 @@ export function Fretboard({ song, ed }: Props) {
 
         {track.tuning.map((_, s) => (
           <text key={s} x={10} y={stringY(s) + 4} className="fb-stringname" pointerEvents="none">
-            {stringLabel(track.tuning, s)}
+            {laneLabel(track, s)}
           </text>
         ))}
       </svg>

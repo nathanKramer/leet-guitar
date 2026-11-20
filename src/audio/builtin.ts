@@ -5,12 +5,19 @@ import { audio } from './context';
 import { DrumSynth } from './drums';
 import type { SoundEngine } from './engine';
 
-/** Karplus-Strong plucked string, rendered once per pitch and cached. */
-class GuitarSynth {
-  private cache = new Map<number, { buffer: AudioBuffer; rate: number }>();
+/**
+ * How many times the initial noise burst is smoothed. More smoothing removes high harmonics
+ * from the pluck: a guitar pick is bright, a bass played with fingers is round.
+ */
+const SMOOTHING: Record<'guitar' | 'bass', number> = { guitar: 0, bass: 6 };
 
-  private voice(midi: number) {
-    const hit = this.cache.get(midi);
+/** Karplus-Strong plucked string, rendered once per pitch and tone, and cached. */
+class PluckSynth {
+  private cache = new Map<string, { buffer: AudioBuffer; rate: number }>();
+
+  private voice(midi: number, tone: 'guitar' | 'bass') {
+    const key = `${tone}:${midi}`;
+    const hit = this.cache.get(key);
     if (hit) return hit;
     const { ctx } = audio();
     const sr = ctx.sampleRate;
@@ -30,6 +37,18 @@ class GuitarSynth {
       ring[i] = (r + prev) * 0.5;
       prev = r;
     }
+    for (let pass = 0; pass < SMOOTHING[tone]; pass++) {
+      let last = ring[period - 1];
+      for (let i = 0; i < period; i++) {
+        const cur = ring[i];
+        ring[i] = (last + cur * 2 + ring[(i + 1) % period]) / 4;
+        last = cur;
+      }
+    }
+    // Smoothing lowers the burst's energy; bring it back up so loudness stays consistent.
+    let peak = 0;
+    for (let i = 0; i < period; i++) peak = Math.max(peak, Math.abs(ring[i]));
+    if (peak > 0) for (let i = 0; i < period; i++) ring[i] /= peak;
     const decay = 0.996;
     let idx = 0;
     for (let i = 0; i < length; i++) {
@@ -39,13 +58,19 @@ class GuitarSynth {
       idx = next;
     }
     const v = { buffer, rate };
-    this.cache.set(midi, v);
+    this.cache.set(key, v);
     return v;
   }
 
-  play(midi: number, when: number, duration: number, velocity = 96): AudioScheduledSourceNode[] {
+  play(
+    midi: number,
+    when: number,
+    duration: number,
+    velocity = 96,
+    tone: 'guitar' | 'bass' = 'guitar',
+  ): AudioScheduledSourceNode[] {
     const { ctx, master } = audio();
-    const { buffer, rate } = this.voice(midi);
+    const { buffer, rate } = this.voice(midi, tone);
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.playbackRate.value = rate;
@@ -63,7 +88,7 @@ class GuitarSynth {
 }
 
 export class BuiltInEngine implements SoundEngine {
-  private guitar = new GuitarSynth();
+  private strings = new PluckSynth();
   private drums = new DrumSynth();
   private sources = new Set<AudioScheduledSourceNode>();
 
@@ -73,7 +98,9 @@ export class BuiltInEngine implements SoundEngine {
 
   playNote(track: Track, pitch: number, when: number, duration: number, velocity: number) {
     const nodes =
-      track.kind === 'drums' ? this.drums.play(pitch, when, velocity) : this.guitar.play(pitch, when, duration, velocity);
+      track.kind === 'drums'
+        ? this.drums.play(pitch, when, velocity)
+        : this.strings.play(pitch, when, duration, velocity, track.kind);
     for (const n of nodes) {
       this.sources.add(n);
       n.addEventListener('ended', () => this.sources.delete(n));
@@ -83,7 +110,7 @@ export class BuiltInEngine implements SoundEngine {
   preview(_song: Song, track: Track, pitch: number) {
     const when = audio().ctx.currentTime + 0.01;
     if (track.kind === 'drums') this.drums.play(pitch, when, 100);
-    else this.guitar.play(pitch, when, 0.6);
+    else this.strings.play(pitch, when, 0.6, 96, track.kind);
   }
 
   stopAll() {

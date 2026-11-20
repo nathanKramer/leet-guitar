@@ -1,4 +1,4 @@
-import { stringLabel } from './music';
+import { pitchClassName, stringLabel } from './music';
 import type { Note, Track } from './types';
 
 /** Default kit lanes, top to bottom in drum-notation order (cymbals above, kick at the bottom). */
@@ -45,7 +45,9 @@ export function notePitch(track: Track, note: Pick<Note, 'string' | 'fret'>): nu
   return track.tuning[note.string] + note.fret;
 }
 
-/** Row label for a lane: string name for guitar, kit piece for drums. */
+/** Row label for a lane: kit piece for drums, string name otherwise (bass tab writes every string upper-case). */
 export function laneLabel(track: Track, lane: number): string {
-  return track.kind === 'drums' ? drumName(track.tuning[lane]) : stringLabel(track.tuning, lane);
+  if (track.kind === 'drums') return drumName(track.tuning[lane]);
+  if (track.kind === 'bass') return pitchClassName(track.tuning[lane]);
+  return stringLabel(track.tuning, lane);
 }

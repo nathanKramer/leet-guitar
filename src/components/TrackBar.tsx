@@ -2,7 +2,7 @@ import { useState } from 'react';
 import * as act from '../editor/actions';
 import type { EditorState } from '../editor/editorStore';
 import { setTrackProgram, sortedTracks } from '../model/commands';
-import { DRUM_KITS, GUITAR_PROGRAMS } from '../model/instruments';
+import { TRACK_KIND_ORDER, TRACK_KINDS } from '../model/instruments';
 import { docStore } from '../session';
 import type { Song } from '../model/types';
 
@@ -18,7 +18,7 @@ export function TrackBar({ song, ed }: { song: Song; ed: EditorState }) {
         return (
           <div key={t.id} className={['track-tab', active ? 'active' : '', muted ? 'muted-track' : ''].join(' ')}>
             <button className="tab-main" onClick={() => act.selectTrack(t.id)} onDoubleClick={() => setRenaming(t.id)} title="Double-click to rename">
-              <span className="tab-icon">{t.kind === 'drums' ? '🥁' : '🎸'}</span>
+              <span className={`tab-icon ${t.kind}`}>{t.kind === 'drums' ? '🥁' : '🎸'}</span>
               {renaming === t.id ? (
                 <input
                   autoFocus
@@ -48,12 +48,12 @@ export function TrackBar({ song, ed }: { song: Song; ed: EditorState }) {
                     : 'Instrument (heard with a SoundFont; exported to MIDI)'
                 }
               >
-                {(t.kind === 'drums' ? DRUM_KITS : GUITAR_PROGRAMS).map((p) => (
+                {TRACK_KINDS[t.kind].programs.map((p) => (
                   <option key={p.program} value={p.program}>
                     {p.name}
                   </option>
                 ))}
-                {!(t.kind === 'drums' ? DRUM_KITS : GUITAR_PROGRAMS).some((p) => p.program === t.program) && (
+                {!TRACK_KINDS[t.kind].programs.some((p) => p.program === t.program) && (
                   <option value={t.program}>Program {t.program + 1}</option>
                 )}
               </select>
@@ -74,8 +74,11 @@ export function TrackBar({ song, ed }: { song: Song; ed: EditorState }) {
           </div>
         );
       })}
-      <button onClick={() => act.addTrack('guitar')}>+ Guitar</button>
-      <button onClick={() => act.addTrack('drums')}>+ Drums</button>
+      {TRACK_KIND_ORDER.map((kind) => (
+        <button key={kind} onClick={() => act.addTrack(kind)}>
+          + {TRACK_KINDS[kind].label}
+        </button>
+      ))}
     </nav>
   );
 }

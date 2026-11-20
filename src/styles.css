@@ -488,3 +488,7 @@ kbd {
   background: var(--panel-2);
   margin-right: 2px;
 }
+/* Bass shares the guitar emoji; tint it so the tabs are easy to tell apart. */
+.tab-icon.bass {
+  filter: hue-rotate(190deg) saturate(1.4);
+}

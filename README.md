@@ -20,7 +20,8 @@ npm run build
 - `←/→` cursor · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
   `Alt+↑/↓` move notes to the adjacent string at the same pitch · `Space` play · `Del` delete ·
   `Ctrl+Z / Ctrl+Shift+Z` undo/redo · `Ctrl+A/C/X/V` select all, copy, cut, paste at the cursor.
-- **Tracks**: add guitar or drum tracks from the tab bar. Double-click a tab to rename it; **M** mutes it during
+- **Tracks**: add guitar, bass or drum tracks from the tab bar. Bass tracks are 4-string (E A D G), 24 frets, and
+  work exactly like guitar tracks: fretboard, typed frets, moving notes between strings at the same pitch. Double-click a tab to rename it; **M** mutes it during
   playback (just for you, not saved in the song); **×** deletes it along with its notes (undoable).
 - **Drums**: a drum track swaps the fretboard for pads (Crash, Ride, Open hat, Hi-hat, three toms, Snare, Kick).
   Click a pad or press `1`–`9` to add a hit at the cursor (Shift-click to stack), or click an empty cell in the
@@ -29,7 +30,8 @@ npm run build
   from your computer for more realistic sound; the app never downloads or hosts one. The file is kept in this
   browser (IndexedDB) for next time, you can switch back to the built-in synth from the **Sound** menu, and **×**
   removes it. This is a local setting and isn't shared with collaborators. With a SoundFont loaded, the instrument
-  menu on the active track tab is audible: guitar tones (nylon, steel, clean, overdrive, distortion, …) or drum kits
+  menu on the active track tab is audible: guitar tones (nylon, steel, clean, overdrive, distortion, …), bass tones
+  (finger, pick, fretless, slap, synth, …) or drum kits
   (standard, room, jazz, brush, …). The choice is saved in the song and included in MIDI exports.
 - **Export MIDI**: one channel per guitar track, or one channel per string (the layout MIDI guitar controllers and
   many tab editors use). Drum tracks always go on channel 10, the General MIDI drum channel.
@@ -43,7 +45,7 @@ Time is measured in ticks at **480 PPQ**, which makes every triplet value an exa
 sixteenth triplet = 80).
 
 A track is a set of lanes, each with a MIDI pitch, and a note's pitch is always `tuning[lane] + fret`. On a guitar
-track the lanes are strings. On a drum track they are kit pieces, and `fret` is always 0. Playback, MIDI export, and
+or bass track the lanes are strings. On a drum track they are kit pieces, and `fret` is always 0. Playback, MIDI export, and
 the one-note-per-lane rule work the same way for both.
 
 ```
@@ -54,6 +56,7 @@ src/model/      Pure document model — no DOM, no React
   materialize.ts  CRDT entries → typed Song view
   durations.ts    Note values, triplets, bars/beats
   drums.ts        Default kit (General MIDI drum notes) and lane names
+  instruments.ts  Per track kind (guitar / bass / drums): default tuning, frets, instrument choices
 src/sync/       Transport and persistence
   provider.ts     SyncProvider interface + message types
   broadcastChannel.ts  Cross-tab provider (ops, snapshot handshake, presence)
