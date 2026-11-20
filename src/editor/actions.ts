@@ -180,3 +180,13 @@ export function toggleMute(trackId: ID) {
       : [...s.mutedTracks, trackId],
   }));
 }
+
+/** Move the selected notes in time and pitch together (timeline drag). */
+export function shiftSelection(shift: cmd.NoteShift) {
+  docStore.transact(cmd.shiftNotes(song(), liveSelection(), shift));
+}
+
+/** Sound a pitch on a track without changing anything (e.g. while dragging a note). */
+export function audition(trackId: ID, pitch: number) {
+  player.preview(song(), trackId, pitch);
+}

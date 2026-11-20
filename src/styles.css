@@ -579,3 +579,10 @@ kbd {
 .tl-note .tl-fret.small {
   font-size: 9px;
 }
+.tl-note.dragging {
+  cursor: grabbing;
+}
+.tl-note.dragging rect {
+  fill-opacity: 0.75;
+  stroke-dasharray: 3 2;
+}

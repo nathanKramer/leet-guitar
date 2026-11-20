@@ -115,6 +115,48 @@ export function moveNotes(song: Song, ids: ID[], deltaTicks: number): Op[] {
   ]);
 }
 
+/** A move of a group of notes: in time, across lanes (piano keys / drums), and up or down the neck (frets). */
+export interface NoteShift {
+  ticks: number;
+  lanes: number;
+  frets: number;
+}
+
+/**
+ * Limit a shift so every note in the group stays in range (start >= 0, a real lane, a real fret).
+ * The whole group stops together, so chords and intervals keep their shape.
+ */
+export function clampShift(song: Song, ids: ID[], shift: NoteShift): NoteShift {
+  let { ticks, lanes, frets } = shift;
+  for (const id of ids) {
+    const n = song.notes[id];
+    const track = n && song.tracks[n.trackId];
+    if (!track) continue;
+    // `0 - x` rather than `-x`, so a note at zero yields 0 and not -0.
+    ticks = Math.max(ticks, 0 - n.start);
+    lanes = Math.min(Math.max(lanes, 0 - n.string), track.tuning.length - 1 - n.string);
+    frets = Math.min(Math.max(frets, 0 - n.fret), track.frets - n.fret);
+  }
+  return { ticks, lanes, frets };
+}
+
+/** Move notes by a (clamped) shift in one step, applying the one-note-per-lane rule at their destinations. */
+export function shiftNotes(song: Song, ids: ID[], shift: NoteShift): Op[] {
+  const { ticks, lanes, frets } = clampShift(song, ids, shift);
+  if (!ticks && !lanes && !frets) return [];
+  const moving = new Set(ids);
+  const ops: Op[] = [];
+  for (const id of ids) {
+    const n = song.notes[id];
+    if (!n || !song.tracks[n.trackId]) continue;
+    const start = n.start + ticks;
+    const string = n.string + lanes;
+    ops.push(...clearSpace(song, n.trackId, string, start, start + n.duration, moving));
+    ops.push(patchNote(id, { start, string, fret: n.fret + frets }));
+  }
+  return ops;
+}
+
 export function setDurations(song: Song, ids: ID[], duration: number): Op[] {
   return ids.filter((id) => song.notes[id]).map((id) => patchNote(id, { duration }));
 }

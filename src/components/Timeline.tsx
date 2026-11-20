@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
-import { moveSelection, placeNote, stepTicks } from '../editor/actions';
+import { audition, placeNote, shiftSelection, stepTicks } from '../editor/actions';
 import { barTicks, beatTicks, describeDuration } from '../model/durations';
 import { isCymbal, laneLabel } from '../model/drums';
 import { isStringed } from '../model/instruments';
 import { visibleLanes } from '../model/lanes';
 import { isBlackKey, pitchName } from '../model/music';
+import { clampShift, type NoteShift } from '../model/commands';
 import type { ID, Note, Song } from '../model/types';
 import { editor } from '../session';
 import type { PeerState } from '../sync/awareness';
@@ -25,8 +26,22 @@ interface Props {
 
 interface Drag {
   ids: ID[];
+  /** The note that was grabbed; it's auditioned as the pitch changes. */
+  anchor: ID;
   x0: number;
+  y0: number;
   dx: number;
+  dy: number;
+}
+
+/** Guitar/bass: pixels of vertical drag per semitone, and how far to move before transposing at all. */
+const FRET_STEP_PX = 10;
+const FRET_DEAD_ZONE_PX = 6;
+
+/** Whole steps covered by a drag distance, after a dead zone; signed. */
+function dragSteps(px: number, deadZone: number, stepPx: number): number {
+  const dist = Math.abs(px);
+  return dist <= deadZone ? 0 : Math.sign(px) * (1 + Math.floor((dist - deadZone) / stepPx));
 }
 
 export function Timeline({ song, ed, peers }: Props) {
@@ -49,41 +64,75 @@ export function Timeline({ song, ed, peers }: Props) {
   const total = bars * bar;
   const width = total * ppt;
   const piano = track?.kind === 'piano';
+  const stringed = track ? isStringed(track.kind) : true;
   const rowH = piano ? PIANO_ROW_H : ROW_H;
   const chipH = piano ? PIANO_CHIP_H : CHIP_H;
+
+  /**
+   * What a drag does to the grabbed notes: horizontal = time (snapped to the grid); vertical = pitch.
+   * Piano rows are semitones and drum rows are kit pieces, so vertical moves across lanes; on guitar
+   * and bass notes stay on their strings and the fret changes. Clamped so the group keeps its shape.
+   */
+  const dragShift = (d: Drag): NoteShift => {
+    const ticks = Math.round(d.dx / ppt / step) * step;
+    const up = -d.dy;
+    const shift = stringed
+      ? { ticks, lanes: 0, frets: dragSteps(up, FRET_DEAD_ZONE_PX, FRET_STEP_PX) }
+      : { ticks, lanes: -dragSteps(up, rowH / 2, rowH), frets: 0 };
+    return clampShift(song, d.ids, shift);
+  };
+  const shift: NoteShift = drag ? dragShift(drag) : { ticks: 0, lanes: 0, frets: 0 };
+  const dragging = new Set(drag?.ids ?? []);
+
   const [laneStart, laneCount] = useMemo(
-    () => visibleLanes(track?.kind ?? 'guitar', track?.tuning.length ?? 6, [...notes.map((n) => n.string), ed.cursorString]),
-    [track?.kind, track?.tuning.length, notes, ed.cursorString],
+    () =>
+      visibleLanes(track?.kind ?? 'guitar', track?.tuning.length ?? 6, [
+        ...notes.map((n) => n.string + (dragging.has(n.id) ? shift.lanes : 0)),
+        ed.cursorString,
+      ]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [track?.kind, track?.tuning.length, notes, ed.cursorString, drag ? shift.lanes : 0],
   );
   const lanes = Array.from({ length: laneCount }, (_, i) => laneStart + i);
   const inView = (lane: number) => lane >= laneStart && lane < laneStart + laneCount;
   const height = RULER_H + PAD * 2 + laneCount * rowH;
   const rowY = (s: number) => RULER_H + PAD + (s - laneStart) * rowH + rowH / 2;
   /** On-screen box of a note chip; shared by rendering and box selection. */
-  const chipRect = (n: Note, start = n.start) => ({
+  const chipRect = (n: Note, start = n.start, lane = n.string) => ({
     x: start * ppt + 1,
     w: Math.max(n.duration * ppt - 2, piano ? 6 : 14),
-    y: rowY(n.string) - chipH / 2,
+    y: rowY(lane) - chipH / 2,
   });
   const [marquee, setMarquee] = useState<{ x0: number; x1: number; y0: number; y1: number } | null>(null);
 
-  // Snapped drag offset, applied to dragged notes as a live preview.
-  const dragDelta = drag ? Math.round(drag.dx / ppt / step) * step : 0;
-  const dragging = new Set(drag?.ids ?? []);
   const selected = new Set(ed.selection);
 
   const dragRef = useRef<Drag | null>(null);
   dragRef.current = drag;
+  const shiftRef = useRef(dragShift);
+  shiftRef.current = dragShift;
+  // Pitch offset last auditioned during this drag, so each new pitch sounds once.
+  const auditionedRef = useRef(0);
 
   useEffect(() => {
     if (!drag) return;
-    const onMove = (e: MouseEvent) => setDrag((d) => d && { ...d, dx: e.clientX - d.x0 });
+    auditionedRef.current = 0;
+    const onMove = (e: MouseEvent) => {
+      setDrag((d) => d && { ...d, dx: e.clientX - d.x0, dy: e.clientY - d.y0 });
+      const d = dragRef.current;
+      const n = d && song.notes[d.anchor];
+      const t = n && song.tracks[n.trackId];
+      if (!d || !n || !t) return;
+      const s = shiftRef.current({ ...d, dx: e.clientX - d.x0, dy: e.clientY - d.y0 });
+      const offset = s.lanes || s.frets;
+      if (offset !== auditionedRef.current) {
+        auditionedRef.current = offset;
+        audition(t.id, t.tuning[n.string + s.lanes] + n.fret + s.frets);
+      }
+    };
     const onUp = () => {
       const d = dragRef.current;
-      if (d) {
-        const delta = Math.round(d.dx / ppt / step) * step;
-        if (delta !== 0) moveSelection(delta);
-      }
+      if (d) shiftSelection(shiftRef.current(d));
       setDrag(null);
     };
     window.addEventListener('mousemove', onMove);
@@ -166,7 +215,7 @@ export function Timeline({ song, ed, peers }: Props) {
     }
     const n = song.notes[id];
     editor.set({ selection, cursorString: n.string });
-    if (selection.includes(id)) setDrag({ ids: selection, x0: e.clientX, dx: 0 });
+    if (selection.includes(id)) setDrag({ ids: selection, anchor: id, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 });
   };
 
   const gridLines: JSX.Element[] = [];
@@ -237,20 +286,23 @@ export function Timeline({ song, ed, peers }: Props) {
           />
 
           {notes.map((n) => {
-            const start = dragging.has(n.id) ? Math.max(0, n.start + dragDelta) : n.start;
-            const { x, w, y } = chipRect(n, start);
+            const moving = dragging.has(n.id);
+            const start = moving ? n.start + shift.ticks : n.start;
+            const lane = moving ? n.string + shift.lanes : n.string;
+            const fret = moving ? n.fret + shift.frets : n.fret;
+            const { x, w, y } = chipRect(n, start, lane);
             const triplet = describeDuration(n.duration)?.triplet;
-            const color = piano ? 'piano' : `s${n.string % 6}`;
-            const cls = ['tl-note', color, selected.has(n.id) ? 'selected' : ''].join(' ');
+            const color = piano ? 'piano' : `s${lane % 6}`;
+            const cls = ['tl-note', color, selected.has(n.id) ? 'selected' : '', moving ? 'dragging' : ''].join(' ');
             const label = piano
               ? w >= 30
-                ? pitchName(track.tuning[n.string])
+                ? pitchName(track.tuning[lane])
                 : ''
               : isDrums
-                ? isCymbal(track.tuning[n.string])
+                ? isCymbal(track.tuning[lane])
                   ? '×'
                   : '●'
-                : n.fret;
+                : fret;
             return (
               <g key={n.id} className={cls} onMouseDown={(e) => onNoteDown(e, n.id)}>
                 <rect x={x} y={y} width={w} height={chipH} rx={piano ? 2 : 4} />

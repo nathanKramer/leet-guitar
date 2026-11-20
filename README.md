@@ -14,7 +14,11 @@ npm run build
 
 - **Fretboard**: click a fret to place a note at the cursor using the current note value; the cursor then advances.
   Shift-click (or toggle **Chord**) to stack notes at the same time.
-- **Timeline**: click to move the cursor (time + string), click notes to select (Shift for multi), drag to move.
+- **Timeline**: click to move the cursor (time + string), click notes to select (Shift for multi), and drag across
+  empty space to box-select. Dragging selected notes sideways moves them in time; dragging up or down transposes them
+  (piano: one row per semitone; guitar/bass: notes stay on their strings and the fret changes, about 10 px per
+  semitone; drums: moves hits to another kit piece). The selection moves as a group and stops at the instrument's
+  range, so chords keep their shape. The grabbed note sounds at each new pitch.
 - **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet. Changing the value resizes any selected notes.
 - **Typing frets**: `0`–`9` enters a fret on the cursor string; two digits in quick succession make fret 10+.
 - `←/→` cursor · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
