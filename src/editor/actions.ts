@@ -1,9 +1,10 @@
 /** User-level actions shared by the toolbar, fretboard, timeline and keyboard shortcuts. */
 import * as cmd from '../model/commands';
-import { durationTicks, type BaseDuration } from '../model/durations';
+import { barTicks, durationTicks, type BaseDuration } from '../model/durations';
 import { TRACK_KINDS } from '../model/instruments';
 import type { Clip } from '../model/transfer';
 import type { ID, TrackKind } from '../model/types';
+import { BARS_PER_ROW } from './editorStore';
 import { docStore, editor, player } from '../session';
 
 let clipboard: Clip | null = null;
@@ -64,15 +65,24 @@ export function setFret(id: ID, fret: number) {
 }
 
 /** Changing the note value also applies it to any selected notes. */
-/** Narrowest spacing (px) between grid steps before the timeline zooms in to keep notes legible. */
-const MIN_STEP_PX = 16;
+/** Narrowest spacing (px) between grid steps before the timeline shows fewer bars per row. */
+const MIN_STEP_PX = 14;
+/** Timeline width taken by the lane labels and margin, roughly. */
+const ROW_CHROME_PX = 60;
+
+/** Ticks covered by one timeline row. */
+export const rowTicks = () => ed().barsPerRow * barTicks(song().meta);
 
 export function setDuration(base: BaseDuration, triplet = ed().triplet) {
   const ticks = durationTicks(base, triplet);
+  const bar = barTicks(song().meta);
+  const fits = (bars: number) => ((ed().rowWidth - ROW_CHROME_PX) / (bars * bar)) * ticks >= MIN_STEP_PX;
   editor.set((s) => ({
     base,
     triplet,
-    zoom: ticks * s.zoom < MIN_STEP_PX ? Math.min(1, MIN_STEP_PX / ticks) : s.zoom,
+    barsPerRow: fits(s.barsPerRow)
+      ? s.barsPerRow
+      : ([...BARS_PER_ROW].reverse().find((b) => b < s.barsPerRow && fits(b)) ?? BARS_PER_ROW[0]),
   }));
   const sel = liveSelection();
   if (sel.length) docStore.transact(cmd.setDurations(song(), sel, durationTicks(base, triplet)));
@@ -84,6 +94,15 @@ export function toggleTriplet() {
 
 export function moveCursor(deltaTicks: number) {
   editor.set((s) => ({ cursor: Math.max(0, s.cursor + deltaTicks) }));
+}
+
+/** Zoom: step the number of bars per row (dir -1 = fewer bars, i.e. zoom in). */
+export function stepBarsPerRow(dir: 1 | -1) {
+  editor.set((s) => {
+    const i = BARS_PER_ROW.indexOf(s.barsPerRow);
+    const next = BARS_PER_ROW[Math.min(BARS_PER_ROW.length - 1, Math.max(0, (i < 0 ? 2 : i) + dir))];
+    return { barsPerRow: next };
+  });
 }
 
 export function moveCursorString(delta: number) {

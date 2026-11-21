@@ -19,6 +19,11 @@ npm run build
   (piano: one row per semitone; guitar/bass: notes stay on their strings and the fret changes, about 10 px per
   semitone; drums: moves hits to another kit piece). The selection moves as a group and stops at the instrument's
   range, so chords keep their shape. The grabbed note sounds at each new pitch.
+- **Rows**: the song is laid out in rows of 4 bars, stacked like a page and scrolled vertically; click anywhere in
+  any row to put the cursor there. `PgUp`/`PgDn` move the cursor a row, and the view follows the cursor (and the
+  playhead during playback). The toolbar's −/+ sets bars per row (1, 2, 4 or 8); picking a short note value on a
+  narrow window drops to fewer bars per row so the grid stays clickable. Notes that run past the end of a row
+  continue at the start of the next (drawn dashed).
 - **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet. Changing the value resizes any selected notes.
 - **Typing frets**: `0`–`9` enters a fret on the cursor string; two digits in quick succession make fret 10+.
 - `←/→` cursor · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
@@ -54,6 +59,12 @@ npm run build
   (finger, pick, fretless, slap, synth, …), piano-family sounds (grand, electric grand, Rhodes, harpsichord, …) or
   drum kits
   (standard, room, jazz, brush, …). The choice is saved in the song and included in MIDI exports.
+- **Projects**: **Save** (`Ctrl+S`) writes the whole song to a `.leetguitar` file, and **Open…** (`Ctrl+O`, or
+  drop a file on the page) loads one. In Chromium browsers Save then keeps writing to that same file
+  (`Ctrl+Shift+S` saves a copy elsewhere); in other browsers Save downloads a copy. Opening a project replaces the
+  current song for everyone editing it, as one edit that `Ctrl+Z` undoes. The song is also kept in this browser
+  automatically, so files are for backups, moving between machines and sharing. A project keeps everything; MIDI
+  export leaves out strings and frets, tunings, track kinds and names.
 - **Export MIDI**: one channel per guitar track, or one channel per string (the layout MIDI guitar controllers and
   many tab editors use). Drum tracks always go on channel 10, the General MIDI drum channel.
 
@@ -82,6 +93,7 @@ src/model/      Pure document model — no DOM, no React
   lanes.ts        Which lanes the timeline shows (piano roll range)
   transfer.ts     Pasting across instruments: pitch → lane/fret, guitar/bass fingering search
   tunings.ts      Tuning presets (6/7-string guitar, 4/5-string bass) and names
+  project.ts      Project file format: song ↔ JSON, validation, ops that replace a document's contents
 src/sync/       Transport and persistence
   provider.ts     SyncProvider interface + message types
   broadcastChannel.ts  Cross-tab provider (ops, snapshot handshake, presence)

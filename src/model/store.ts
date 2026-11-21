@@ -8,7 +8,7 @@ import {
   type Op,
   type StampedOp,
 } from './crdt';
-import { materialize, META_ID, readMeta, readNote, readTrack } from './materialize';
+import { DEFAULT_META, materialize, META_ID, readMeta, readNote, readTrack } from './materialize';
 import type { ID, Song } from './types';
 
 type Listener = () => void;
@@ -125,9 +125,14 @@ export class DocumentStore {
       case 'put':
         return e?.alive ? { t: 'put', coll, id, value: { ...e.fields } } : { t: 'del', coll, id };
       case 'patch': {
-        if (!e) return null;
+        // A song setting that was never written reads as its default, so undo writes the default back.
+        const defaults: Record<string, unknown> = coll === 'meta' ? { ...DEFAULT_META } : {};
         const prev: Record<string, unknown> = {};
-        for (const k of Object.keys(op.patch)) if (k in e.fields) prev[k] = e.fields[k];
+        for (const k of Object.keys(op.patch)) {
+          if (e && k in e.fields) prev[k] = e.fields[k];
+          else if (k in defaults) prev[k] = defaults[k];
+        }
+        if (!Object.keys(prev).length) return null;
         return { t: 'patch', coll, id, patch: prev };
       }
       case 'del':

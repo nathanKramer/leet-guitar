@@ -8,6 +8,7 @@ import { TrackBar } from './components/TrackBar';
 import { selectTrack } from './editor/actions';
 import { useStore } from './editor/editorStore';
 import { handleKeyDown } from './editor/keyboard';
+import { loadProjectFile } from './editor/project';
 import { sortedTracks } from './model/commands';
 import { describeDuration, DURATION_NAMES, PPQ } from './model/durations';
 import { editor, usePeers, useSong } from './session';
@@ -27,7 +28,24 @@ export default function App() {
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Dropping a project file anywhere on the page opens it.
+    const hasFile = (e: DragEvent) => e.dataTransfer?.types.includes('Files');
+    const onDragOver = (e: DragEvent) => {
+      if (hasFile(e)) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      const file = e.dataTransfer?.files[0];
+      if (!file) return;
+      e.preventDefault();
+      void loadProjectFile(file);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
   }, []);
 
   // The active track can disappear (deleted here, by undo, or by a collaborator).
@@ -73,18 +91,18 @@ export default function App() {
             <span className="keys">
               <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> key ·{' '}
               <kbd>Alt ↑↓</kbd> semitone · <kbd>Shift ↑↓</kbd> octave · <kbd>Alt ←→</kbd> move notes ·{' '}
-              <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+              <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
             </span>
           ) : song.tracks[ed.trackId]?.kind === 'drums' ? (
             <span className="keys">
               <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>1-9</kbd> pads · <kbd>←→</kbd> cursor ·{' '}
-              <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+              <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
             </span>
           ) : (
             <span className="keys">
               <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>0-9</kbd> type fret ·{' '}
               <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± ·{' '}
-              <kbd>Alt ←→↑↓</kbd> move notes · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+              <kbd>Alt ←→↑↓</kbd> move notes · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
             </span>
           )}
         </footer>

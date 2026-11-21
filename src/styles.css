@@ -65,7 +65,7 @@ button.primary {
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 /* Toolbar */
@@ -127,10 +127,17 @@ input.title {
 }
 
 main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 16px;
+}
+/* Everything above and below the timeline keeps its size; the timeline takes what's left and scrolls. */
+main > * {
+  flex-shrink: 0;
 }
 
 /* Fretboard */
@@ -228,38 +235,70 @@ main {
 
 /* Timeline */
 .timeline {
+  flex: 1 1 auto;
+  flex-shrink: 1;
+  min-height: 280px;
   display: flex;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
 }
-.tl-gutter {
-  position: relative;
-  width: 34px;
-  flex: none;
-  border-right: 1px solid var(--border);
-  background: var(--panel-2);
-}
-.tl-label {
-  position: absolute;
-  left: 0;
-  right: 0;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 12px;
-  color: var(--muted);
-}
-.tl-label.active {
-  color: var(--accent);
-}
 .tl-scroll {
-  overflow-x: auto;
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .tl-scroll svg {
   display: block;
+}
+.tl-row-bg {
+  fill: var(--panel);
+}
+.tl-gutter-bg {
+  fill: var(--panel-2);
+}
+.tl-gutter-edge {
+  stroke: var(--border);
+}
+.tl-lane {
+  fill: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.tl-lane.active {
+  fill: var(--accent);
+}
+.tl-lane.drums {
+  text-anchor: start;
+  font-size: 11px;
+  font-weight: 600;
+}
+.tl-lane.piano {
+  text-anchor: end;
+  font-size: 9px;
+  font-weight: 500;
+  fill: #5d636d;
+}
+.tl-lane.piano.octave {
+  fill: var(--text);
+  font-weight: 700;
+}
+.tl-lane.piano.active {
+  fill: var(--accent);
+}
+.tl-note .continued rect {
+  stroke-dasharray: 4 3;
+}
+.bars-per-row {
+  min-width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .tl-ruler {
   fill: var(--panel-2);
@@ -471,16 +510,6 @@ kbd {
 .pad.s4 { --note: var(--s4); }
 .pad.s5 { --note: var(--s5); }
 
-.tl-gutter.drums {
-  width: 84px;
-}
-.tl-gutter.drums .tl-label {
-  justify-items: start;
-  padding-left: 10px;
-  font-weight: 600;
-  font-size: 11px;
-}
-
 /* Sound + instrument */
 .sound-error {
   color: #ff8787;
@@ -552,26 +581,6 @@ kbd {
 }
 
 /* Piano roll */
-.tl-gutter.piano {
-  width: 44px;
-}
-.tl-gutter.piano .tl-label {
-  font-size: 9px;
-  font-weight: 500;
-  justify-items: end;
-  padding-right: 6px;
-  color: #5d636d;
-}
-.tl-gutter.piano .tl-label.black-key {
-  background: rgba(0, 0, 0, 0.28);
-}
-.tl-gutter.piano .tl-label.octave {
-  color: var(--text);
-  font-weight: 700;
-}
-.tl-gutter.piano .tl-label.active {
-  color: var(--accent);
-}
 .tl-blackkey {
   fill: #000;
   opacity: 0.22;

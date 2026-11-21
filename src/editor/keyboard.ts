@@ -1,5 +1,6 @@
 import { docStore, editor } from '../session';
 import * as act from './actions';
+import { openProject, saveProject } from './project';
 import { stepDuration, type BaseDuration } from '../model/durations';
 
 const DURATION_KEYS: Record<string, BaseDuration> = {
@@ -25,7 +26,10 @@ function enterDigit(d: number) {
   }
   if (track.kind === 'piano') return; // no frets to type
   const now = Date.now();
-  if (pendingDigit && now - pendingDigit.at < DIGIT_WINDOW_MS && docStore.getSong().notes[pendingDigit.id]) {
+  const pendingNote = pendingDigit && docStore.getSong().notes[pendingDigit.id];
+  // Only combine with a note still under the cursor: after moving on, a new digit is a new note.
+  const sameSpot = pendingNote && pendingNote.start === s.cursor && pendingNote.string === s.cursorString;
+  if (pendingDigit && now - pendingDigit.at < DIGIT_WINDOW_MS && sameSpot) {
     const combined = pendingDigit.value * 10 + d;
     if (combined <= track.frets) {
       act.setFret(pendingDigit.id, combined);
@@ -43,8 +47,15 @@ function isTyping(target: EventTarget | null) {
 }
 
 export function handleKeyDown(e: KeyboardEvent) {
-  if (isTyping(e.target)) return;
   const mod = e.ctrlKey || e.metaKey;
+  // Save / open work from anywhere, including text fields, instead of the browser's "save page".
+  if (mod && !e.altKey && (e.key.toLowerCase() === 's' || e.key.toLowerCase() === 'o')) {
+    e.preventDefault();
+    if (e.key.toLowerCase() === 's') void saveProject(e.shiftKey);
+    else void openProject();
+    return;
+  }
+  if (isTyping(e.target)) return;
   const key = e.key.toLowerCase();
   const hasSel = act.liveSelection().length > 0;
   let handled = true;
@@ -94,6 +105,11 @@ export function handleKeyDown(e: KeyboardEvent) {
         break;
       case 'Home':
         editor.set({ cursor: 0 });
+        break;
+      case 'PageDown':
+      case 'PageUp':
+        // Same spot, one timeline row (a few bars) later or earlier.
+        act.moveCursor((e.key === 'PageDown' ? 1 : -1) * act.rowTicks());
         break;
       case 't':
       case 'T':

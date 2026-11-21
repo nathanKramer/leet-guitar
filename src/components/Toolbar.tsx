@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as act from '../editor/actions';
 import { useStore, type EditorState } from '../editor/editorStore';
+import { openProject, saveProject } from '../editor/project';
 import { loadSoundFontFile, removeSoundFont, setSource, sound, type SoundSource } from '../editor/sound';
 import { downloadMidi, type ChannelMode } from '../midi/export';
 import { setMeta } from '../model/commands';
@@ -56,6 +57,12 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
           title="Song title"
           onCommit={(v) => docStore.transact(setMeta({ title: v }))}
         />
+        <button onClick={() => void openProject()} title="Open a project file (Ctrl+O), or drop one on the page">
+          Open…
+        </button>
+        <button onClick={() => void saveProject()} title="Save the project to a file (Ctrl+S; Ctrl+Shift+S to save as)">
+          Save
+        </button>
       </div>
 
       <div className="group">
@@ -131,10 +138,13 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
         <button onClick={act.redo} disabled={!docStore.canRedo} title="Redo (Ctrl+Shift+Z)">
           ↷
         </button>
-        <button onClick={() => editor.set((s) => ({ zoom: Math.max(0.05, s.zoom / 1.25) }))} title="Zoom out">
+        <button onClick={() => act.stepBarsPerRow(1)} title="Zoom out: more bars per row">
           −
         </button>
-        <button onClick={() => editor.set((s) => ({ zoom: Math.min(1, s.zoom * 1.25) }))} title="Zoom in">
+        <span className="muted bars-per-row" title="Bars per timeline row">
+          {ed.barsPerRow} {ed.barsPerRow === 1 ? 'bar' : 'bars'}/row
+        </span>
+        <button onClick={() => act.stepBarsPerRow(-1)} title="Zoom in: fewer bars per row">
           +
         </button>
       </div>

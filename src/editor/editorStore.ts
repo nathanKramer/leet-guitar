@@ -3,6 +3,9 @@ import type { BaseDuration } from '../model/durations';
 import type { ChannelMode } from '../midi/export';
 import type { ID } from '../model/types';
 
+/** Row lengths the timeline can be set to (zoom in = fewer bars per row). */
+export const BARS_PER_ROW = [1, 2, 4, 8];
+
 /** Local, per-user UI state. Never synced or persisted with the document. */
 export interface EditorState {
   trackId: ID;
@@ -15,8 +18,10 @@ export interface EditorState {
   selection: ID[];
   playing: boolean;
   playhead: number | null;
-  /** Pixels per tick in the timeline. */
-  zoom: number;
+  /** How many bars each timeline row holds; rows stack vertically and stretch to the timeline's width. */
+  barsPerRow: number;
+  /** Measured width (px) of the timeline, used to keep grid steps wide enough to click. */
+  rowWidth: number;
   midiMode: ChannelMode;
   /** Tracks silenced during playback (a local listening choice, not part of the song). */
   mutedTracks: ID[];
