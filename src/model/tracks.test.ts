@@ -95,3 +95,25 @@ describe('tracks', () => {
     expect(bytes.some((b, i) => b === (0x90 | ch) && bytes[i + 1] === 35)).toBe(true);
   });
 });
+
+describe('previousNote', () => {
+  it('is the latest earlier note in the same track, then the lane above at the same start', async () => {
+    const { previousNote } = await import('./commands');
+    const s = newStore();
+    const add = (trackId: string, lane: number, start: number) => {
+      const { ops, id } = addNote(s.getSong(), hit(trackId, lane, start));
+      s.transact(ops);
+      return id;
+    };
+    const drums = addTrack(s.getSong(), 'drums');
+    s.transact(drums.ops);
+    const a = add(DEFAULT_TRACK_ID, 2, 0);
+    const b = add(DEFAULT_TRACK_ID, 0, 480);
+    const c = add(DEFAULT_TRACK_ID, 3, 480);
+    add(drums.id, 1, 240); // other track: ignored
+    const song = s.getSong();
+    expect(previousNote(song, c)?.id).toBe(b);
+    expect(previousNote(song, b)?.id).toBe(a);
+    expect(previousNote(song, a)).toBeNull();
+  });
+});

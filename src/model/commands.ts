@@ -140,6 +140,19 @@ export function addNote(song: Song, input: NoteInput): { ops: Op[]; id: ID } {
   return { ops, id };
 }
 
+/** The note before this one in its track: the latest earlier start, then the next lane up at the same start. */
+export function previousNote(song: Song, id: ID): Note | null {
+  const target = song.notes[id];
+  if (!target) return null;
+  let best: Note | null = null;
+  const before = (a: Note, b: Note) => a.start < b.start || (a.start === b.start && a.string < b.string);
+  for (const n of Object.values(song.notes)) {
+    if (n.trackId !== target.trackId || n.id === id || !before(n, target)) continue;
+    if (!best || before(best, n)) best = n;
+  }
+  return best;
+}
+
 export function deleteNotes(ids: ID[]): Op[] {
   return ids.map((id) => ({ t: 'del', coll: 'notes', id }));
 }

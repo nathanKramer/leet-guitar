@@ -35,6 +35,7 @@ export function placeNote(string: number, fret: number, opts: { advance: boolean
   const s = ed();
   const track = song().tracks[s.trackId];
   if (!track) return;
+  const selectedBefore = liveSelection();
   const duration = stepTicks();
   const { ops, id } = cmd.addNote(song(), {
     trackId: s.trackId,
@@ -46,10 +47,15 @@ export function placeNote(string: number, fret: number, opts: { advance: boolean
   });
   docStore.transact(ops);
   player.preview(song(), s.trackId, track.tuning[string] + fret);
-  // Entry deliberately leaves the selection empty: changing the note value
-  // between entries must not resize the note just placed.
+  // The new note is selected. Notes stacked at the cursor (chord mode, Shift-click, typing on
+  // another string without moving) join the selection, so the whole chord stays selected.
+  // (A note the new one replaced is simply gone from the selection.)
+  const notes = song().notes;
+  const stacked = selectedBefore.filter((sid) => notes[sid]);
+  const stacking =
+    (!opts.advance || s.chordMode) && stacked.every((sid) => notes[sid].trackId === s.trackId && notes[sid].start === s.cursor);
   editor.set({
-    selection: [],
+    selection: stacking ? [...stacked, id] : [id],
     cursorString: string,
     cursor: opts.advance && !s.chordMode ? s.cursor + duration : s.cursor,
   });
@@ -64,7 +70,6 @@ export function setFret(id: ID, fret: number) {
   player.preview(song(), n.trackId, track.tuning[n.string] + fret);
 }
 
-/** Changing the note value also applies it to any selected notes. */
 /** Narrowest spacing (px) between grid steps before the timeline shows fewer bars per row. */
 const MIN_STEP_PX = 14;
 /** Timeline width taken by the lane labels and margin, roughly. */
@@ -73,6 +78,10 @@ const ROW_CHROME_PX = 60;
 /** Ticks covered by one timeline row. */
 export const rowTicks = () => ed().barsPerRow * barTicks(song().meta);
 
+/**
+ * Set the note value for new notes, and apply it to any selected notes. If the selected notes all end at the
+ * cursor (e.g. a note just entered from the fretboard), the cursor moves with their end.
+ */
 export function setDuration(base: BaseDuration, triplet = ed().triplet) {
   const ticks = durationTicks(base, triplet);
   const bar = barTicks(song().meta);
@@ -85,7 +94,12 @@ export function setDuration(base: BaseDuration, triplet = ed().triplet) {
       : ([...BARS_PER_ROW].reverse().find((b) => b < s.barsPerRow && fits(b)) ?? BARS_PER_ROW[0]),
   }));
   const sel = liveSelection();
-  if (sel.length) docStore.transact(cmd.setDurations(song(), sel, durationTicks(base, triplet)));
+  if (!sel.length) return;
+  const notes = sel.map((id) => song().notes[id]);
+  const start = notes[0].start;
+  const followCursor = notes.every((n) => n.start === start && n.start + n.duration === ed().cursor);
+  docStore.transact(cmd.setDurations(song(), sel, ticks));
+  if (followCursor) editor.set({ cursor: start + ticks });
 }
 
 export function toggleTriplet() {
@@ -126,9 +140,28 @@ export function moveSelectionString(delta: number) {
   docStore.transact(cmd.moveToString(song(), liveSelection(), delta));
 }
 
+/** Deletes the selected notes. Deleting a single note selects the one before it, so you can keep deleting. */
 export function deleteSelection() {
-  docStore.transact(cmd.deleteNotes(liveSelection()));
-  editor.set({ selection: [] });
+  const sel = liveSelection();
+  const before = sel.length === 1 ? cmd.previousNote(song(), sel[0]) : null;
+  docStore.transact(cmd.deleteNotes(sel));
+  if (before) selectNote(before.id);
+  else editor.set({ selection: [] });
+}
+
+/** Select just this note, put the cursor on its string, and sound it. */
+export function selectNote(id: ID) {
+  const n = song().notes[id];
+  if (!n) return;
+  editor.set({ selection: [id], cursorString: n.string });
+  previewNote(id);
+}
+
+/** Sound a note as it's written. */
+export function previewNote(id: ID) {
+  const n = song().notes[id];
+  const track = n && song().tracks[n.trackId];
+  if (track) player.preview(song(), track.id, track.tuning[n.string] + n.fret);
 }
 
 export function selectAll() {

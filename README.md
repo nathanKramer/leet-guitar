@@ -13,8 +13,9 @@ npm run build
 ## Using it
 
 - **Fretboard**: click a fret to place a note at the cursor using the current note value; the cursor then advances.
-  Shift-click (or toggle **Chord**) to stack notes at the same time.
-- **Timeline**: click to move the cursor (time + string), click notes to select (Shift for multi), and drag across
+  Shift-click (or toggle **Chord**) to stack notes at the same time. A new note is selected (a stacked chord stays
+  selected together), so you can change its value, move it or delete it straight away.
+- **Timeline**: click to move the cursor (time + string), click notes to select and hear them (Shift for multi), and drag across
   empty space to box-select. Dragging selected notes sideways moves them in time; dragging up or down transposes them
   (piano: one row per semitone; guitar/bass: notes stay on their strings and the fret changes, about 10 px per
   semitone; drums: moves hits to another kit piece). The selection moves as a group and stops at the instrument's
@@ -24,10 +25,12 @@ npm run build
   playhead during playback). The toolbar's −/+ sets bars per row (1, 2, 4 or 8); picking a short note value on a
   narrow window drops to fewer bars per row so the grid stays clickable. Notes that run past the end of a row
   continue at the start of the next (drawn dashed).
-- **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet. Changing the value resizes any selected notes.
+- **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet. Changing the value resizes any selected notes, including
+  the one you just entered; if they end at the cursor, the cursor moves with them. Press `Esc` first to change the
+  value for the next note only.
 - **Typing frets**: `0`–`9` enters a fret on the cursor string; two digits in quick succession make fret 10+.
 - `←/→` cursor · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
-  `Alt+↑/↓` move notes to the adjacent string at the same pitch · `Space` play · `Del` delete ·
+  `Alt+↑/↓` move notes to the adjacent string at the same pitch · `Space` play · `Del` delete (deleting one note selects the one before it) ·
   `Ctrl+Z / Ctrl+Shift+Z` undo/redo · `Ctrl+A/C/X/V` select all, copy, cut, paste at the cursor.
 - **Copying between instruments**: copied notes keep their real pitch, so you can paste them into a different kind
   of track. Into the same instrument with the same tuning, the fingering is kept as-is. Into piano, each note goes on

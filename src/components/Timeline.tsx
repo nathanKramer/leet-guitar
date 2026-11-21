@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
-import { audition, placeNote, shiftSelection, stepTicks } from '../editor/actions';
+import { audition, placeNote, previewNote, shiftSelection, stepTicks } from '../editor/actions';
 import { barTicks, beatTicks, describeDuration } from '../model/durations';
 import { isCymbal, laneLabel } from '../model/drums';
 import { isStringed } from '../model/instruments';
@@ -274,6 +274,7 @@ export function Timeline({ song, ed, peers }: Props) {
     }
     const n = song.notes[id];
     editor.set({ selection, cursorString: n.string });
+    if (selection.includes(id)) previewNote(id);
     if (selection.includes(id)) setDrag({ ids: selection, anchor: id, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 });
   };
 
