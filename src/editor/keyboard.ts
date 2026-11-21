@@ -83,7 +83,7 @@ export function handleKeyDown(e: KeyboardEvent) {
       case 'ArrowLeft': {
         const dir = e.key === 'ArrowRight' ? 1 : -1;
         if (e.altKey && hasSel) act.moveSelection(dir * act.stepTicks());
-        else act.moveCursor(dir * act.stepTicks());
+        else act.stepCursor(dir);
         break;
       }
       case 'ArrowUp':
@@ -110,6 +110,10 @@ export function handleKeyDown(e: KeyboardEvent) {
       case 'PageUp':
         // Same spot, one timeline row (a few bars) later or earlier.
         act.moveCursor((e.key === 'PageDown' ? 1 : -1) * act.rowTicks());
+        break;
+      case 'p':
+      case 'P':
+        act.togglePalmMute();
         break;
       case 't':
       case 'T':

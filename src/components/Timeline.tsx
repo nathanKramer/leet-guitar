@@ -22,6 +22,8 @@ const ROW_H = 26;
 const CHIP_H = 20;
 const PIANO_ROW_H = 14;
 const PIANO_CHIP_H = 12;
+/** Guitar/bass: band above the strings for palm-mute markings, like the "P.M." line in tab. */
+const MARKS_H = 13;
 
 interface Props {
   song: Song;
@@ -105,7 +107,9 @@ export function Timeline({ song, ed, peers }: Props) {
   const lanes = Array.from({ length: laneCount }, (_, i) => laneStart + i);
   const inView = (lane: number) => lane >= laneStart && lane < laneStart + laneCount;
   /** Height of one row (ruler + lanes), and the distance from one row's top to the next. */
-  const rowBody = RULER_H + PAD * 2 + laneCount * rowH;
+  /** Top of the first lane within a row. */
+  const lanesTop = RULER_H + PAD + (stringed ? MARKS_H : 0);
+  const rowBody = lanesTop + PAD + laneCount * rowH;
   const stride = rowBody + ROW_GAP;
   const height = rows * stride - ROW_GAP;
   const rowTop = (r: number) => r * stride;
@@ -115,7 +119,7 @@ export function Timeline({ song, ed, peers }: Props) {
     const r = rowOf(tick);
     return { r, x: gutter + (tick - r * rowTicks) * ppt };
   };
-  const laneY = (r: number, lane: number) => rowTop(r) + RULER_H + PAD + (lane - laneStart) * rowH + rowH / 2;
+  const laneY = (r: number, lane: number) => rowTop(r) + lanesTop + (lane - laneStart) * rowH + rowH / 2;
   /**
    * On-screen boxes of a note chip: one per row it crosses (a note can run past the end of a row).
    * Shared by rendering and box selection.
@@ -141,8 +145,8 @@ export function Timeline({ song, ed, peers }: Props) {
     const r = Math.min(rows - 1, Math.max(0, Math.floor(y / stride)));
     const local = y - rowTop(r);
     const tick = r * rowTicks + Math.min(rowTicks - 1, Math.max(0, (x - gutter) / ppt));
-    const lane = laneStart + Math.floor((local - RULER_H - PAD) / rowH);
-    const onLane = local >= RULER_H + PAD && local < rowBody - PAD && inView(lane);
+    const lane = laneStart + Math.floor((local - lanesTop) / rowH);
+    const onLane = local >= lanesTop && local < rowBody - PAD && inView(lane);
     return { r, tick, lane: onLane ? lane : null };
   };
   const [marquee, setMarquee] = useState<{ x0: number; x1: number; y0: number; y1: number } | null>(null);
@@ -351,6 +355,44 @@ export function Timeline({ song, ed, peers }: Props) {
     );
   };
 
+  /**
+   * Palm-mute markings: one "P.M. - - -|" span per run of palm-muted notes that follow on without a gap
+   * (chords count once), split where a run crosses into the next row.
+   */
+  const palmMuteSpans = (() => {
+    if (!stringed) return [];
+    const muted = notes
+      .filter((n) => n.palmMute)
+      .map((n) => {
+        const start = dragging.has(n.id) ? Math.max(0, n.start + shift.ticks) : n.start;
+        return { start, end: start + n.duration };
+      })
+      .sort((a, b) => a.start - b.start);
+    const runs: { start: number; end: number }[] = [];
+    for (const m of muted) {
+      const last = runs[runs.length - 1];
+      if (last && m.start <= last.end) last.end = Math.max(last.end, m.end);
+      else runs.push({ ...m });
+    }
+    return runs.flatMap((run) => {
+      const out: { key: string; r: number; x0: number; x1: number; first: boolean; last: boolean }[] = [];
+      for (let t = run.start; t < run.end; ) {
+        const r = rowOf(t);
+        const segEnd = Math.min(run.end, (r + 1) * rowTicks);
+        out.push({
+          key: `${run.start}:${r}`,
+          r,
+          x0: gutter + (t - r * rowTicks) * ppt,
+          x1: gutter + (segEnd - r * rowTicks) * ppt,
+          first: t === run.start,
+          last: segEnd === run.end,
+        });
+        t = segEnd;
+      }
+      return out;
+    });
+  })();
+
   /** A vertical marker (cursor, playhead, peer) at a tick, spanning that tick's row. */
   const marker = (tick: number) => {
     const { r, x } = at(tick);
@@ -405,6 +447,22 @@ export function Timeline({ song, ed, peers }: Props) {
                     )}
                   </g>
                 ))}
+              </g>
+            );
+          })}
+
+          {palmMuteSpans.map(({ key, r, x0, x1, first, last }) => {
+            const y = rowTop(r) + RULER_H + PAD + MARKS_H / 2;
+            const lineStart = first ? x0 + 26 : x0 + 2;
+            return (
+              <g key={key} className="tl-pm" pointerEvents="none">
+                {first && (
+                  <text x={x0 + 2} y={y}>
+                    P.M.
+                  </text>
+                )}
+                {x1 - 3 > lineStart && <line x1={lineStart} x2={x1 - 3} y1={y} y2={y} />}
+                {last && <line x1={x1 - 3} x2={x1 - 3} y1={y - 4} y2={y + 4} className="tl-pm-end" />}
               </g>
             );
           })}

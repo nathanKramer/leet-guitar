@@ -2,7 +2,15 @@
 import { sortedTracks } from '../model/commands';
 import { isStringed } from '../model/instruments';
 import { PPQ } from '../model/durations';
-import { DRUM_CHANNEL, stringChannels, trackChannels } from './channels';
+import { ticksToSeconds } from '../model/durations';
+import {
+  DRUM_CHANNEL,
+  MUTED_GUITAR_PROGRAM,
+  palmMuteChannels,
+  palmMuted,
+  stringChannels,
+  trackChannels,
+} from './channels';
 import type { Song } from '../model/types';
 
 export type ChannelMode =
@@ -55,6 +63,8 @@ function trackChunk(events: TimedEvent[]): number[] {
 export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Array {
   const tracks = sortedTracks(song);
   const trackChannel = trackChannels(song);
+  const muteChannel = palmMuteChannels(song);
+  const tickSeconds = ticksToSeconds(1, song.meta.bpm);
   const { meta } = song;
 
   const tempo = Math.round(60_000_000 / meta.bpm);
@@ -77,18 +87,29 @@ export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Ar
         ? stringChannels(track)
         : track.tuning.map(() => trackChannel.get(track.id) ?? DRUM_CHANNEL);
     // Drums: program change on channel 10 selects the kit (GS convention); the standard kit needs none.
+    // Melodic tracks: bank select (CC 0, then CC 32) before the program change picks a SoundFont variation.
     if (!drums || track.program !== 0) {
       for (const ch of new Set(channels)) {
+        if (!drums && track.bank) {
+          events.push({ tick: 0, order: 0, bytes: [0xb0 | ch, 0, track.bank & 0x7f] });
+          events.push({ tick: 0, order: 0, bytes: [0xb0 | ch, 32, 0] });
+        }
         events.push({ tick: 0, order: 0, bytes: [0xc0 | ch, track.program & 0x7f] });
       }
     }
+    // Palm-muted notes on the muted guitar program get their own channel (per-track layout only, so the
+    // per-string layout keeps one channel per string); every palm-muted note is damped, as in playback.
+    const pmChannel = mode === 'per-track' ? muteChannel.get(track.id) : undefined;
+    if (pmChannel !== undefined) events.push({ tick: 0, order: 0, bytes: [0xc0 | pmChannel, MUTED_GUITAR_PROGRAM] });
     for (const n of Object.values(song.notes)) {
       if (n.trackId !== track.id) continue;
-      const ch = channels[n.string] ?? channels[0];
+      const ch = n.palmMute && pmChannel !== undefined ? pmChannel : (channels[n.string] ?? channels[0]);
       const pitch = Math.min(127, Math.max(0, track.tuning[n.string] + n.fret));
-      const vel = Math.min(127, Math.max(1, Math.round(n.velocity)));
+      const damped = palmMuted(n.palmMute, track, n.duration * tickSeconds, n.velocity);
+      const length = Math.max(1, Math.min(n.duration, Math.round(damped.seconds / tickSeconds)));
+      const vel = Math.min(127, Math.max(1, Math.round(damped.velocity)));
       events.push({ tick: n.start, order: 2, bytes: [0x90 | ch, pitch, vel] });
-      events.push({ tick: n.start + n.duration, order: 1, bytes: [0x80 | ch, pitch, 0] });
+      events.push({ tick: n.start + length, order: 1, bytes: [0x80 | ch, pitch, 0] });
     }
     chunks.push(trackChunk(events));
   }

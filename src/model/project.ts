@@ -82,6 +82,7 @@ export function parseProject(text: string): ParsedProject {
       tuning: t.tuning as number[],
       frets: isInt(t.frets, 0, 36) ? t.frets : 0,
       program: isInt(t.program, 0, 127) ? t.program : 0,
+      bank: isInt(t.bank, 0, 127) ? t.bank : 0,
       order: i,
     });
   }
@@ -104,6 +105,7 @@ export function parseProject(text: string): ParsedProject {
       start: n.start,
       duration: n.duration,
       velocity: isInt(n.velocity, 1, 127) ? n.velocity : 96,
+      ...(n.palmMute === true && (track.kind === 'guitar' || track.kind === 'bass') && { palmMute: true }),
     });
   }
   return { meta, tracks, notes, skipped: rawNotes.length - notes.length };

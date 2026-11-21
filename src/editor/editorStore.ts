@@ -25,6 +25,8 @@ export interface EditorState {
   midiMode: ChannelMode;
   /** Tracks silenced during playback (a local listening choice, not part of the song). */
   mutedTracks: ID[];
+  /** Soloed tracks: while any are soloed, only they play (still a local listening choice). */
+  soloTracks: ID[];
   /** A short message for the status bar (e.g. what a paste had to change); clears itself. */
   notice: string | null;
 }

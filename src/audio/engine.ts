@@ -8,9 +8,9 @@ export interface SoundEngine {
   /** Called when playback starts, e.g. to send program changes for each track. */
   prepare(song: Song): void | Promise<void>;
   /** Schedule a note. `when` is in AudioContext seconds; `duration` in seconds. */
-  playNote(track: Track, pitch: number, when: number, duration: number, velocity: number): void;
+  playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute?: boolean): void;
   /** Sound a note right away (placing notes, hitting pads). */
-  preview(song: Song, track: Track, pitch: number): void;
+  preview(song: Song, track: Track, pitch: number, palmMute?: boolean): void;
   /** Silence everything now, including notes already scheduled. */
   stopAll(): void;
   dispose(): void;

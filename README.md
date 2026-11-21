@@ -29,9 +29,16 @@ npm run build
   the one you just entered; if they end at the cursor, the cursor moves with them. Press `Esc` first to change the
   value for the next note only.
 - **Typing frets**: `0`–`9` enters a fret on the cursor string; two digits in quick succession make fret 10+.
-- `←/→` cursor · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
+- `←/→` step the cursor and select (and hear) the note or chord that starts there · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
   `Alt+↑/↓` move notes to the adjacent string at the same pitch · `Space` play · `Del` delete (deleting one note selects the one before it) ·
   `Ctrl+Z / Ctrl+Shift+Z` undo/redo · `Ctrl+A/C/X/V` select all, copy, cut, paste at the cursor.
+- **Palm muting**: `P` (or **P.M.** in the toolbar) palm mutes the selected guitar or bass notes, or unmutes them if
+  they all are already. The timeline marks them as in tab: "P.M. - - -|" above the strings, one span per run of
+  muted notes. Palm-muted notes are damped: they ring for at most 0.2 s and play a little softer. With a SoundFont,
+  clean and acoustic guitars also switch to General MIDI's muted guitar sound (program 28) for those notes, so
+  MIDI export gives them a channel of their own. GM has no distorted or bass palm-mute sound, so overdriven,
+  distorted and bass tracks keep their own tone and are only damped. The built-in synth damps the string itself.
+  Palm muting is kept by copy/paste between guitar and bass tracks and in project files.
 - **Copying between instruments**: copied notes keep their real pitch, so you can paste them into a different kind
   of track. Into the same instrument with the same tuning, the fingering is kept as-is. Into piano, each note goes on
   its key. Into guitar or bass, strings and frets are chosen for you: chord shapes stay compact, and a passage is
@@ -40,13 +47,22 @@ npm run build
   the status bar says when either happened. Drum hits and pitched notes don't paste into each other.
 - **Tracks**: add guitar, bass, piano or drum tracks from the tab bar. Bass tracks are 4-string (E A D G), 24 frets, and
   work exactly like guitar tracks: fretboard, typed frets, moving notes between strings at the same pitch. Double-click a tab to rename it; **M** mutes it during
-  playback (just for you, not saved in the song); **×** deletes it along with its notes (undoable).
+  playback and **S** solos it: while any track is soloed, only soloed tracks play (Alt-click **S** to solo just
+  that track; mute still wins). Both are just for you, not saved in the song, and take effect immediately, even
+  mid-playback; **×** deletes it along with its notes (undoable).
 - **Tunings**: the tuning button on an active guitar or bass tab (e.g. **E Std**) opens presets — 6-string
   (Standard, E♭/D/C/B Standard, Drop D/C/B, DADGAD, Open G, Open D), 7-string (Standard B, Drop A, A Standard) and
   bass (Standard, Drop D, D Standard, 5-string B) — or set each string a semitone at a time and add or remove a low
   string (4–8 strings) for a custom tuning. Retuning keeps every note's string and fret, like retuning a real
   instrument, so the tab stays the same and the pitches follow. Notes on a removed string move to another string at
   the same pitch where possible; the status bar reports any that couldn't.
+- **Other instruments**: **+ Instrument…** adds a track for any melodic instrument (kalimba, strings, flute,
+  synth pads, …). With a SoundFont loaded it lists the font's own presets, including variations in other banks
+  (e.g. Ukulele, 12-String Guitar), searchable and grouped by General MIDI family; without one it lists the 128
+  General MIDI instruments. Guitars and basses get a fretboard track, everything else a piano-roll track. A
+  piano-roll track's instrument menu offers every instrument, and a track still named after its instrument is
+  renamed when you switch. The built-in synth plays piano-roll tracks as piano, so load a SoundFont to hear the
+  real instrument. The bank is saved in the song and sent as bank select (CC 0) in MIDI exports.
 - **Piano**: a piano track swaps the fretboard for a clickable 88-key keyboard (Shift-click to stack chords), and
   the timeline becomes a piano roll that sizes itself to the range you're using (at least two octaves). Click an empty
   cell in the roll to add a note there. `↑/↓` moves the cursor a key, `Alt+↑/↓` moves selected notes a semitone and
@@ -92,6 +108,7 @@ src/model/      Pure document model — no DOM, no React
   materialize.ts  CRDT entries → typed Song view
   durations.ts    Note values, triplets, bars/beats
   drums.ts        Default kit (General MIDI drum notes) and lane names
+  gm.ts           General MIDI instrument names and families
   instruments.ts  Per track kind (guitar / bass / piano / drums): default lanes, frets, instrument choices
   lanes.ts        Which lanes the timeline shows (piano roll range)
   transfer.ts     Pasting across instruments: pitch → lane/fret, guitar/bass fingering search

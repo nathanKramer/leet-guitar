@@ -2,9 +2,10 @@
 import * as cmd from '../model/commands';
 import { barTicks, durationTicks, type BaseDuration } from '../model/durations';
 import { TRACK_KINDS } from '../model/instruments';
+import { trackKindFor, type Instrument } from '../model/gm';
 import type { Clip } from '../model/transfer';
 import type { ID, TrackKind } from '../model/types';
-import { BARS_PER_ROW } from './editorStore';
+import { BARS_PER_ROW, type EditorState } from './editorStore';
 import { docStore, editor, player } from '../session';
 
 let clipboard: Clip | null = null;
@@ -110,6 +111,21 @@ export function moveCursor(deltaTicks: number) {
   editor.set((s) => ({ cursor: Math.max(0, s.cursor + deltaTicks) }));
 }
 
+/**
+ * Step the cursor by the current note value and select whatever starts at the new position (a whole chord,
+ * if several notes start there), sounding it. Stepping onto empty space clears the selection.
+ */
+export function stepCursor(dir: 1 | -1) {
+  moveCursor(dir * stepTicks());
+  const { cursor, trackId } = ed();
+  const here = cmd
+    .notesInTrack(song(), trackId)
+    .filter((n) => n.start === cursor)
+    .map((n) => n.id);
+  editor.set({ selection: here });
+  here.forEach(previewNote);
+}
+
 /** Zoom: step the number of bars per row (dir -1 = fewer bars, i.e. zoom in). */
 export function stepBarsPerRow(dir: 1 | -1) {
   editor.set((s) => {
@@ -161,7 +177,19 @@ export function selectNote(id: ID) {
 export function previewNote(id: ID) {
   const n = song().notes[id];
   const track = n && song().tracks[n.trackId];
-  if (track) player.preview(song(), track.id, track.tuning[n.string] + n.fret);
+  if (track) player.preview(song(), track.id, track.tuning[n.string] + n.fret, n.palmMute);
+}
+
+/** Palm mute the selected guitar/bass notes, or unmute them if they all are already. */
+export function togglePalmMute() {
+  const sel = liveSelection();
+  const ops = cmd.togglePalmMute(song(), sel);
+  if (!ops.length) {
+    if (sel.length) notify('Palm muting is for guitar and bass notes.');
+    return;
+  }
+  docStore.transact(ops);
+  if (sel.length === 1) previewNote(sel[0]);
 }
 
 export function selectAll() {
@@ -210,7 +238,8 @@ export function togglePlay() {
   player.play(
     song(),
     ed().cursor,
-    ed().mutedTracks,
+    // Read at scheduling time, so muting or soloing during playback takes effect straight away.
+    (trackId) => !isAudible(trackId),
     (tick) => editor.set({ playhead: tick }),
     () => editor.set({ playing: false, playhead: null }),
   );
@@ -241,6 +270,23 @@ export function addTrack(kind: TrackKind) {
   selectTrack(id);
 }
 
+/** Add a track for an instrument: guitars and basses get a fretboard, everything else a piano roll. */
+export function addInstrumentTrack(instrument: Instrument) {
+  const { ops, id } = cmd.addTrack(song(), trackKindFor(instrument.program), instrument);
+  docStore.transact(ops);
+  selectTrack(id);
+}
+
+/** Change a track's instrument. A track still named after its old instrument (or its kind) takes the new name. */
+export function setInstrument(trackId: ID, instrument: Instrument, oldName: string | undefined) {
+  const track = song().tracks[trackId];
+  if (!track) return;
+  const ops = cmd.setTrackProgram(trackId, instrument.program, instrument.bank);
+  const autoNamed = track.name === oldName || track.name === TRACK_KINDS[track.kind].label;
+  if (autoNamed && track.kind === 'piano') ops.push(...cmd.renameTrack(trackId, instrument.name));
+  docStore.transact(ops);
+}
+
 export function deleteTrack(trackId: ID) {
   const remaining = cmd.sortedTracks(song()).filter((t) => t.id !== trackId);
   if (!remaining.length) return;
@@ -253,12 +299,23 @@ export function renameTrack(trackId: ID, name: string) {
   if (trimmed) docStore.transact(cmd.renameTrack(trackId, trimmed));
 }
 
+const toggled = (list: ID[], id: ID) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
 export function toggleMute(trackId: ID) {
+  editor.set((s) => ({ mutedTracks: toggled(s.mutedTracks, trackId) }));
+}
+
+/** Solo a track. Several can be soloed at once; with `exclusive`, this one becomes the only solo. */
+export function toggleSolo(trackId: ID, exclusive = false) {
   editor.set((s) => ({
-    mutedTracks: s.mutedTracks.includes(trackId)
-      ? s.mutedTracks.filter((id) => id !== trackId)
-      : [...s.mutedTracks, trackId],
+    soloTracks: exclusive && !(s.soloTracks.length === 1 && s.soloTracks[0] === trackId) ? [trackId] : toggled(s.soloTracks, trackId),
   }));
+}
+
+/** Whether a track is heard: not muted, and soloed if any track is (mute wins over solo). */
+export function isAudible(trackId: ID, s: EditorState = ed()) {
+  const solos = s.soloTracks.filter((id) => song().tracks[id]);
+  return !s.mutedTracks.includes(trackId) && (!solos.length || solos.includes(trackId));
 }
 
 /** Move the selected notes in time and pitch together (timeline drag). */

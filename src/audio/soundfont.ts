@@ -4,7 +4,8 @@
  */
 import { WorkletSynthesizer } from 'spessasynth_lib';
 import processorUrl from 'spessasynth_lib/dist/spessasynth_processor.min.js?url';
-import { trackChannels } from '../midi/channels';
+import { MUTED_GUITAR_PROGRAM, PALM_MUTE_MAX_S, palmMuteChannels, trackChannels, usesMutedProgram } from '../midi/channels';
+import { GM_PROGRAM_NAMES, type Instrument } from '../model/gm';
 import type { ID, Song, Track } from '../model/types';
 import { audio } from './context';
 import type { SoundEngine } from './engine';
@@ -19,6 +20,7 @@ const OUTPUT_GAIN = 5;
 export class SoundFontEngine implements SoundEngine {
   private readonly out: GainNode;
   private channels = new Map<ID, number>();
+  private muteChannels = new Map<ID, number>();
   /**
    * The synth schedules events against its own clock, which runs a constant amount
    * behind the AudioContext's (~200 ms in Chromium, set when the worklet starts).
@@ -60,6 +62,16 @@ export class SoundFontEngine implements SoundEngine {
       // The synth takes ownership of the buffer; keep the caller's copy intact.
       await synth.soundBankManager.addSoundBank(data.slice(0), 'main');
       await synth.isReady;
+      // The preset list arrives from the worklet as an event; wait for it so the instrument menus can use it.
+      if (!synth.presetList.length) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 3000);
+          synth.eventHandler.addEvent('presetListChange', 'leet-guitar-presets', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+      }
     } catch (err) {
       engine.dispose();
       throw err;
@@ -92,25 +104,50 @@ export class SoundFontEngine implements SoundEngine {
     this.channels = trackChannels(song);
     for (const track of Object.values(song.tracks)) {
       const ch = this.channels.get(track.id);
-      if (ch !== undefined) this.synth.programChange(ch, track.program);
+      if (ch !== undefined) this.setInstrument(ch, track, track.program);
     }
+    this.muteChannels = palmMuteChannels(song);
+    for (const [id, ch] of this.muteChannels) this.setInstrument(ch, song.tracks[id], MUTED_GUITAR_PROGRAM, 0);
     await this.syncClock();
   }
 
-  playNote(track: Track, pitch: number, when: number, duration: number, velocity: number) {
-    const ch = this.channels.get(track.id);
+  playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute = false) {
+    const muteCh = palmMute ? this.muteChannels.get(track.id) : undefined;
+    const ch = muteCh ?? this.channels.get(track.id);
     if (ch === undefined) return;
     const t = when + this.clockOffset;
     this.synth.noteOn(ch, pitch, velocity, { time: t });
     this.synth.noteOff(ch, pitch, { time: t + duration });
   }
 
-  preview(song: Song, track: Track, pitch: number) {
+  preview(song: Song, track: Track, pitch: number, palmMute = false) {
     const ch = trackChannels(song).get(track.id);
     if (ch === undefined) return;
-    this.synth.programChange(ch, track.program);
-    this.synth.noteOn(ch, pitch, 100);
-    this.synth.noteOff(ch, pitch, { time: audio().ctx.currentTime + this.clockOffset + PREVIEW_S });
+    // A palm-muted preview borrows the track's channel: a program change only affects notes started after
+    // it, so the muted note keeps its sound when the track's own program is set straight back.
+    const muted = palmMute && usesMutedProgram(track);
+    if (muted) this.setInstrument(ch, track, MUTED_GUITAR_PROGRAM, 0);
+    else this.setInstrument(ch, track, track.program);
+    this.synth.noteOn(ch, pitch, palmMute ? 85 : 100);
+    if (muted) this.setInstrument(ch, track, track.program);
+    const length = palmMute ? PALM_MUTE_MAX_S : PREVIEW_S;
+    this.synth.noteOff(ch, pitch, { time: audio().ctx.currentTime + this.clockOffset + length });
+  }
+
+  /** Bank select (melodic tracks only; the drum channel's kit is chosen by program alone) and program change. */
+  private setInstrument(ch: number, track: Track, program: number, bank = track.bank) {
+    if (track.kind !== 'drums') {
+      this.synth.controllerChange(ch, 0, bank);
+      this.synth.controllerChange(ch, 32, 0);
+    }
+    this.synth.programChange(ch, program);
+  }
+
+  /** The SoundFont's melodic presets (drum kits are left out). */
+  instruments(): Instrument[] {
+    return this.synth.presetList
+      .filter((p) => !p.isDrum && p.bankLSB === 0)
+      .map((p) => ({ program: p.program, bank: p.bankMSB, name: p.name.trim() || GM_PROGRAM_NAMES[p.program] }));
   }
 
   stopAll() {

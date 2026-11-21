@@ -30,6 +30,7 @@ export function readTrack(id: ID, e: Entry | undefined): Track | null {
     tuning: Array.isArray(f.tuning) ? (f.tuning as number[]) : STANDARD_TUNING,
     frets: num(f.frets, 22),
     program: num(f.program, 25),
+    bank: num(f.bank, 0),
     order: num(f.order, 0),
   };
 }
@@ -49,6 +50,7 @@ export function readNote(id: ID, e: Entry | undefined): Note | null {
     start: f.start as number,
     duration: f.duration as number,
     velocity: num(f.velocity, 96),
+    ...(f.palmMute === true && { palmMute: true }),
   };
 }
 

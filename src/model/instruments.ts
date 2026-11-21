@@ -1,4 +1,5 @@
 import { DRUM_KIT } from './drums';
+import { GM_INSTRUMENTS, trackKindFor, type Instrument } from './gm';
 import { MIDDLE_C, PIANO_KEYS, STANDARD_BASS_TUNING, STANDARD_TUNING } from './music';
 import type { Track, TrackKind } from './types';
 
@@ -63,7 +64,7 @@ export interface TrackKindInfo {
   /** Instrument (or kit) choices for the track's program. */
   programs: Program[];
   /** Settings a new track of this kind starts with. */
-  defaults: Pick<Track, 'tuning' | 'frets' | 'program'>;
+  defaults: Pick<Track, 'tuning' | 'frets' | 'program' | 'bank'>;
   /** Lane the cursor starts on when switching to a track of this kind. */
   homeLane: number;
 }
@@ -73,25 +74,37 @@ export const TRACK_KINDS: Record<TrackKind, TrackKindInfo> = {
   guitar: {
     label: 'Guitar',
     programs: GUITAR_PROGRAMS,
-    defaults: { tuning: STANDARD_TUNING, frets: 22, program: 25 },
+    defaults: { tuning: STANDARD_TUNING, frets: 22, program: 25, bank: 0 },
     homeLane: 0,
   },
   bass: {
     label: 'Bass',
     programs: BASS_PROGRAMS,
-    defaults: { tuning: STANDARD_BASS_TUNING, frets: 24, program: 33 },
+    defaults: { tuning: STANDARD_BASS_TUNING, frets: 24, program: 33, bank: 0 },
     homeLane: 0,
   },
   piano: {
     label: 'Piano',
     programs: PIANO_PROGRAMS,
-    defaults: { tuning: PIANO_KEYS, frets: 0, program: 0 },
+    defaults: { tuning: PIANO_KEYS, frets: 0, program: 0, bank: 0 },
     homeLane: PIANO_KEYS.indexOf(MIDDLE_C),
   },
-  drums: { label: 'Drums', programs: DRUM_KITS, defaults: { tuning: DRUM_KIT, frets: 0, program: 0 }, homeLane: 0 },
+  drums: { label: 'Drums', programs: DRUM_KITS, defaults: { tuning: DRUM_KIT, frets: 0, program: 0, bank: 0 }, homeLane: 0 },
 };
 
 export const TRACK_KIND_ORDER: TrackKind[] = ['guitar', 'bass', 'piano', 'drums'];
+
+/**
+ * Instruments offered for a track. With a SoundFont loaded, its own presets (every melodic one for a piano-roll
+ * track, the guitar or bass family for those); without one, the General MIDI list for piano-roll tracks and the
+ * short lists above for the rest. Drum tracks always choose a kit.
+ */
+export function instrumentChoices(kind: TrackKind, font: Instrument[] | null): Instrument[] {
+  if (kind === 'drums') return DRUM_KITS.map((k) => ({ program: k.program, bank: 0, name: k.name }));
+  if (font?.length) return kind === 'piano' ? font : font.filter((i) => trackKindFor(i.program) === kind);
+  if (kind === 'piano') return GM_INSTRUMENTS;
+  return TRACK_KINDS[kind].programs.map((p) => ({ program: p.program, bank: 0, name: p.name }));
+}
 
 /** Guitar and bass: lanes are strings and notes have frets. Piano and drums: one lane per key / kit piece. */
 export function isStringed(kind: TrackKind): boolean {

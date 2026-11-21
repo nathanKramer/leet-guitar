@@ -13,11 +13,15 @@ import type { SoundEngine } from './engine';
 const SMOOTHING: Record<'guitar' | 'bass', number> = { guitar: 0, bass: 6 };
 
 /** Karplus-Strong plucked string, rendered once per pitch and tone, and cached. */
+/** Palm muting: extra smoothing (darker attack) and how long the damped string takes to die away (to -40 dB). */
+const MUTED_SMOOTHING = 3;
+const MUTED_DECAY_S = 0.3;
+
 class PluckSynth {
   private cache = new Map<string, { buffer: AudioBuffer; rate: number }>();
 
-  private voice(midi: number, tone: 'guitar' | 'bass') {
-    const key = `${tone}:${midi}`;
+  private voice(midi: number, tone: 'guitar' | 'bass', muted: boolean) {
+    const key = `${tone}:${midi}:${muted ? 'pm' : ''}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
     const { ctx } = audio();
@@ -27,7 +31,7 @@ class PluckSynth {
     // error is corrected with playbackRate so every pitch is in tune.
     const period = Math.max(2, Math.round(sr / freq - 0.5));
     const rate = (freq * (period + 0.5)) / sr;
-    const length = Math.floor(sr * 3);
+    const length = Math.floor(sr * (muted ? MUTED_DECAY_S * 1.5 : 3));
     const buffer = ctx.createBuffer(1, length, sr);
     const out = buffer.getChannelData(0);
     const ring = new Float32Array(period);
@@ -38,7 +42,7 @@ class PluckSynth {
       ring[i] = (r + prev) * 0.5;
       prev = r;
     }
-    for (let pass = 0; pass < SMOOTHING[tone]; pass++) {
+    for (let pass = 0; pass < SMOOTHING[tone] + (muted ? MUTED_SMOOTHING : 0); pass++) {
       let last = ring[period - 1];
       for (let i = 0; i < period; i++) {
         const cur = ring[i];
@@ -50,7 +54,9 @@ class PluckSynth {
     let peak = 0;
     for (let i = 0; i < period; i++) peak = Math.max(peak, Math.abs(ring[i]));
     if (peak > 0) for (let i = 0; i < period; i++) ring[i] /= peak;
-    const decay = 0.996;
+    // The loop scales each sample once per period, so a palm mute's decay is set per period: the string
+    // loses 40 dB over MUTED_DECAY_S whatever its pitch.
+    const decay = muted ? Math.pow(0.01, 1 / (MUTED_DECAY_S * freq)) : 0.996;
     let idx = 0;
     for (let i = 0; i < length; i++) {
       const next = (idx + 1) % period;
@@ -69,9 +75,10 @@ class PluckSynth {
     duration: number,
     velocity = 96,
     tone: 'guitar' | 'bass' = 'guitar',
+    muted = false,
   ): AudioScheduledSourceNode[] {
     const { ctx, master } = audio();
-    const { buffer, rate } = this.voice(midi, tone);
+    const { buffer, rate } = this.voice(midi, tone, muted);
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.playbackRate.value = rate;
@@ -98,23 +105,24 @@ export class BuiltInEngine implements SoundEngine {
     this.drums.resetChoke();
   }
 
-  playNote(track: Track, pitch: number, when: number, duration: number, velocity: number) {
+  playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute = false) {
     const nodes =
       track.kind === 'drums'
         ? this.drums.play(pitch, when, velocity)
         : track.kind === 'piano'
           ? this.piano.play(pitch, when, duration, velocity)
-          : this.strings.play(pitch, when, duration, velocity, track.kind);
+          : this.strings.play(pitch, when, duration, velocity, track.kind, palmMute);
     for (const n of nodes) {
       this.sources.add(n);
       n.addEventListener('ended', () => this.sources.delete(n));
     }
   }
 
-  preview(_song: Song, track: Track, pitch: number) {
+  preview(_song: Song, track: Track, pitch: number, palmMute = false) {
     const when = audio().ctx.currentTime + 0.01;
     if (track.kind === 'drums') this.drums.play(pitch, when, 100);
     else if (track.kind === 'piano') this.piano.play(pitch, when, 0.6, 96);
+    else if (palmMute) this.strings.play(pitch, when, MUTED_DECAY_S, 82, track.kind, true);
     else this.strings.play(pitch, when, 0.6, 96, track.kind);
   }
 

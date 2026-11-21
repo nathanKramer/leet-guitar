@@ -36,14 +36,24 @@ export function sortedTracks(song: Song): Track[] {
   return Object.values(song.tracks).sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1));
 }
 
-export function addTrack(song: Song, kind: TrackKind): { ops: Op[]; id: ID } {
+/**
+ * Add a track after the others. With an instrument, the track plays that program/bank and is named after it
+ * ("Kalimba", then "Kalimba 2"); otherwise it gets the kind's default sound and name.
+ */
+export function addTrack(
+  song: Song,
+  kind: TrackKind,
+  instrument?: { program: number; bank: number; name: string },
+): { ops: Op[]; id: ID } {
   const tracks = sortedTracks(song);
-  const sameKind = tracks.filter((t) => t.kind === kind).length;
-  const base = TRACK_KINDS[kind].label;
-  const name = sameKind ? `${base} ${sameKind + 1}` : base;
+  const base = instrument?.name ?? TRACK_KINDS[kind].label;
+  const taken = new Set(tracks.map((t) => t.name));
+  let name = base;
+  for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
   const order = tracks.reduce((m, t) => Math.max(m, t.order), -1) + 1;
   const id = newId();
-  return { ops: [put('tracks', id, { ...newTrack(kind, name, order) })], id };
+  const sound = instrument ? { program: instrument.program, bank: instrument.bank } : {};
+  return { ops: [put('tracks', id, { ...newTrack(kind, name, order), ...sound })], id };
 }
 
 /** Removes the track and all of its notes, in one undoable step. */
@@ -54,8 +64,8 @@ export function deleteTrack(song: Song, id: ID): Op[] {
 }
 
 /** General MIDI program: the instrument sound, or the kit on a drum track. */
-export function setTrackProgram(id: ID, program: number): Op[] {
-  return [{ t: 'patch', coll: 'tracks', id, patch: { program } }];
+export function setTrackProgram(id: ID, program: number, bank = 0): Op[] {
+  return [{ t: 'patch', coll: 'tracks', id, patch: { program, bank } }];
 }
 
 /**
@@ -151,6 +161,18 @@ export function previousNote(song: Song, id: ID): Note | null {
     if (!best || before(best, n)) best = n;
   }
   return best;
+}
+
+/**
+ * Toggle palm mute on guitar/bass notes: if any of them isn't muted, mute them all; otherwise unmute them all.
+ * Notes on other kinds of track are left alone.
+ */
+export function togglePalmMute(song: Song, ids: ID[]): Op[] {
+  const notes = ids
+    .map((id) => song.notes[id])
+    .filter((n) => n && song.tracks[n.trackId] && isStringed(song.tracks[n.trackId].kind));
+  const mute = notes.some((n) => !n.palmMute);
+  return notes.map((n) => patchNote(n.id, { palmMute: mute }));
 }
 
 export function deleteNotes(ids: ID[]): Op[] {
@@ -268,6 +290,7 @@ export function copyNotes(song: Song, ids: ID[]): Clip | null {
         offset: n.start - min,
         duration: n.duration,
         velocity: n.velocity,
+        ...(n.palmMute && { palmMute: true }),
       })),
   };
 }
@@ -297,6 +320,7 @@ export function pasteNotes(
       start: at + c.offset,
       duration: c.duration,
       velocity: c.velocity,
+      ...(c.palmMute && isStringed(track!.kind) && { palmMute: true }),
     };
     return [
       ...clearSpace(song, trackId, c.string, note.start, note.start + note.duration),

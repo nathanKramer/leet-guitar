@@ -5,6 +5,7 @@ import { openProject, saveProject } from '../editor/project';
 import { loadSoundFontFile, removeSoundFont, setSource, sound, type SoundSource } from '../editor/sound';
 import { downloadMidi, type ChannelMode } from '../midi/export';
 import { setMeta } from '../model/commands';
+import { isStringed } from '../model/instruments';
 import { BASE_DURATIONS, DURATION_LABELS, DURATION_NAMES } from '../model/durations';
 import type { Song } from '../model/types';
 import { awareness, docStore, editor } from '../session';
@@ -129,6 +130,7 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
         >
           Chord
         </button>
+        <PalmMuteButton song={song} ed={ed} />
       </div>
 
       <div className="group">
@@ -171,6 +173,24 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
         ))}
       </div>
     </header>
+  );
+}
+
+/** Palm mute toggle for the selected guitar/bass notes; lit when they're all palm muted. */
+function PalmMuteButton({ song, ed }: { song: Song; ed: EditorState }) {
+  const track = song.tracks[ed.trackId];
+  if (!track || !isStringed(track.kind)) return null;
+  const sel = ed.selection.map((id) => song.notes[id]).filter(Boolean);
+  const on = sel.length > 0 && sel.every((n) => n.palmMute);
+  return (
+    <button
+      className={on ? 'seg active' : 'seg'}
+      onClick={act.togglePalmMute}
+      disabled={!sel.length}
+      title="Palm mute the selected notes (P)"
+    >
+      P.M.
+    </button>
   );
 }
 

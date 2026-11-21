@@ -25,6 +25,8 @@ export interface Track {
   frets: number;
   /** General MIDI program (0-indexed). 25 = Acoustic Guitar (steel). */
   program: number;
+  /** Bank (MIDI CC 0) for SoundFont variations of the program; 0 = the standard General MIDI sound. */
+  bank: number;
   order: number;
 }
 
@@ -40,6 +42,8 @@ export interface Note {
   duration: number;
   /** 1-127 */
   velocity: number;
+  /** Guitar/bass: palm muted (damped with the picking hand). Absent means not muted. */
+  palmMute?: boolean;
 }
 
 /** The materialized, read-only view of a document that the UI renders. */

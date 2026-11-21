@@ -1,4 +1,5 @@
 import { ticksToSeconds } from '../model/durations';
+import { palmMuted } from '../midi/channels';
 import { notePitch } from '../model/drums';
 import type { ID, Note, Song } from '../model/types';
 import { audio } from './context';
@@ -40,12 +41,18 @@ export class Player {
     this.engine = engine;
   }
 
-  preview(song: Song, trackId: ID, pitch: number) {
+  preview(song: Song, trackId: ID, pitch: number, palmMute = false) {
     const track = song.tracks[trackId];
-    if (track) this.engine.preview(song, track, pitch);
+    if (track) this.engine.preview(song, track, pitch, palmMute);
   }
 
-  async play(song: Song, fromTick: number, muted: ID[], onTick: (tick: number) => void, onEnd: () => void) {
+  async play(
+    song: Song,
+    fromTick: number,
+    isSilenced: (trackId: ID) => boolean,
+    onTick: (tick: number) => void,
+    onEnd: () => void,
+  ) {
     this.stop();
     this.active = true;
     this.onEnd = onEnd;
@@ -57,7 +64,6 @@ export class Player {
     const bpm = song.meta.bpm;
     const secondsPerTick = ticksToSeconds(1, bpm);
     const t0 = ctx.currentTime + 0.08;
-    const mutedSet = new Set(muted);
     const notes = Object.values(song.notes)
       .filter((n) => n.start >= fromTick && song.tracks[n.trackId])
       .sort((a, b) => a.start - b.start);
@@ -69,14 +75,16 @@ export class Player {
       const due = dueUntil(notes, next, tickAt(ctx.currentTime + LOOKAHEAD_S));
       for (; next < due; next++) {
         const n = notes[next];
-        if (mutedSet.has(n.trackId)) continue;
+        if (isSilenced(n.trackId)) continue;
         const track = song.tracks[n.trackId];
+        const { seconds, velocity } = palmMuted(n.palmMute, track, n.duration * secondsPerTick, n.velocity);
         engine.playNote(
           track,
           notePitch(track, n),
           t0 + (n.start - fromTick) * secondsPerTick,
-          n.duration * secondsPerTick,
-          n.velocity,
+          seconds,
+          velocity,
+          !!n.palmMute,
         );
       }
     };

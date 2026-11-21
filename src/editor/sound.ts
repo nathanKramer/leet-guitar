@@ -4,6 +4,7 @@
  * The SoundFont file itself is kept in IndexedDB so it survives reloads.
  */
 import type { SoundEngine } from '../audio/engine';
+import type { Instrument } from '../model/gm';
 import { builtInEngine, player } from '../session';
 import { fileStore } from '../sync/fileStore';
 import { stop } from './actions';
@@ -17,6 +18,8 @@ export interface SoundState {
   fontName: string | null;
   loading: boolean;
   error: string | null;
+  /** The loaded SoundFont's melodic instruments, for the instrument menus. */
+  instruments: Instrument[] | null;
 }
 
 const FILE_KEY = 'soundfont';
@@ -27,7 +30,13 @@ interface StoredFont {
   data: ArrayBuffer;
 }
 
-export const sound = createStore<SoundState>({ source: 'builtin', fontName: null, loading: false, error: null });
+export const sound = createStore<SoundState>({
+  source: 'builtin',
+  fontName: null,
+  loading: false,
+  error: null,
+  instruments: null,
+});
 
 let fontEngine: SoundEngine | null = null;
 
@@ -54,7 +63,7 @@ async function activate(font: StoredFont, select: boolean): Promise<boolean> {
     const engine = await SoundFontEngine.create(font.data);
     const previous = fontEngine;
     fontEngine = engine;
-    sound.set({ fontName: font.name, loading: false });
+    sound.set({ fontName: font.name, loading: false, instruments: engine.instruments() });
     if (select) setSource('soundfont');
     else if (sound.get().source === 'soundfont') player.setEngine(engine);
     previous?.dispose();
@@ -82,7 +91,7 @@ export async function removeSoundFont() {
   setSource('builtin');
   fontEngine?.dispose();
   fontEngine = null;
-  sound.set({ fontName: null, error: null });
+  sound.set({ fontName: null, error: null, instruments: null });
   try {
     await fileStore.delete(FILE_KEY);
   } catch {

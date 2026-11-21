@@ -16,6 +16,14 @@ export interface ClipNote {
   offset: number;
   duration: number;
   velocity: number;
+  palmMute?: boolean;
+}
+
+/** Copy the named fields that are present (palm mute is only stored when set). */
+function pick<T extends object, K extends keyof T>(o: T, ...keys: K[]): Pick<T, K> {
+  const out = {} as Pick<T, K>;
+  for (const k of keys) if (o[k] !== undefined) out[k] = o[k];
+  return out;
 }
 
 export interface Clip {
@@ -30,6 +38,7 @@ export interface PlacedNote {
   offset: number;
   duration: number;
   velocity: number;
+  palmMute?: boolean;
 }
 
 export interface Placement {
@@ -214,7 +223,7 @@ function fretClip(notes: ClipNote[], target: Track, result: Placement): Placemen
     g.notes.forEach((n, i) => {
       const spot = spots[i];
       if (!spot) result.dropped++;
-      else result.notes.push({ ...spot, offset: n.offset, duration: n.duration, velocity: n.velocity });
+      else result.notes.push({ ...spot, ...pick(n, 'offset', 'duration', 'velocity', 'palmMute') });
     });
   });
   return result;

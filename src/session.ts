@@ -37,6 +37,7 @@ export const editor = createStore<EditorState>({
   rowWidth: 1000,
   midiMode: 'per-track',
   mutedTracks: [],
+  soloTracks: [],
   notice: null,
 });
 

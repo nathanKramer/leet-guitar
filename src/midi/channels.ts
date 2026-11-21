@@ -1,4 +1,5 @@
 import { sortedTracks } from '../model/commands';
+import { isStringed } from '../model/instruments';
 import type { ID, Song, Track } from '../model/types';
 
 /** General MIDI channel 10 (index 9) is reserved for drums. */
@@ -17,6 +18,45 @@ export function melodicChannel(index: number): number {
 export function trackChannels(song: Song): Map<ID, number> {
   const map = new Map<ID, number>();
   sortedTracks(song).forEach((t, i) => map.set(t.id, t.kind === 'drums' ? DRUM_CHANNEL : melodicChannel(i)));
+  return map;
+}
+
+/**
+ * Palm muting. General MIDI has one palm-muted sound: program 28, "Electric Guitar (muted)", a clean tone.
+ * Clean and acoustic guitar tracks play their palm-muted notes with it, on a channel of their own. Overdriven,
+ * distorted and bass tracks keep their own sound so the tone doesn't change. Every palm-muted note is also
+ * damped: cut short and played a little softer.
+ */
+export const MUTED_GUITAR_PROGRAM = 28;
+/** Longest a palm-muted note rings, in seconds. */
+export const PALM_MUTE_MAX_S = 0.2;
+/** Velocity scale for palm-muted notes. */
+export const PALM_MUTE_VELOCITY = 0.85;
+
+/** Whether a track's palm-muted notes switch to the muted guitar sound (clean and acoustic guitars). */
+export function usesMutedProgram(track: Track): boolean {
+  return track.kind === 'guitar' && track.program >= 24 && track.program <= 28;
+}
+
+/** Damped length (seconds) and velocity of a note, palm muted or not. */
+export function palmMuted(palmMute: boolean | undefined, track: Track, seconds: number, velocity: number) {
+  if (!palmMute || !isStringed(track.kind)) return { seconds, velocity };
+  return {
+    seconds: Math.min(seconds, PALM_MUTE_MAX_S),
+    velocity: Math.max(1, Math.round(velocity * PALM_MUTE_VELOCITY)),
+  };
+}
+
+/**
+ * Extra channels for tracks that play palm-muted notes with the muted guitar program, allocated after the
+ * track channels. Only tracks that have palm-muted notes get one.
+ */
+export function palmMuteChannels(song: Song): Map<ID, number> {
+  const tracks = sortedTracks(song);
+  const muted = new Set(Object.values(song.notes).filter((n) => n.palmMute).map((n) => n.trackId));
+  const map = new Map<ID, number>();
+  let next = tracks.length;
+  for (const t of tracks) if (usesMutedProgram(t) && muted.has(t.id)) map.set(t.id, melodicChannel(next++));
   return map;
 }
 

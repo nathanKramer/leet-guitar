@@ -102,7 +102,8 @@ export default function App() {
             <span className="keys">
               <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>0-9</kbd> type fret ·{' '}
               <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± ·{' '}
-              <kbd>Alt ←→↑↓</kbd> move notes · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+              <kbd>Alt ←→↑↓</kbd> move notes · <kbd>P</kbd> palm mute · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play ·{' '}
+              <kbd>Del</kbd> delete
             </span>
           )}
         </footer>
