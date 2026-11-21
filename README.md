@@ -14,8 +14,10 @@ npm run build
 
 - **Fretboard**: click a fret to place a note at the cursor using the current note value; the cursor then advances.
   Shift-click (or toggle **Chord**) to stack notes at the same time. A new note is selected (a stacked chord stays
-  selected together), so you can change its value, move it or delete it straight away.
-- **Timeline**: click to move the cursor (time + string), click notes to select and hear them (Shift for multi), and drag across
+  selected together), so you can change its value, move it or delete it straight away. Drag a note at the cursor to another
+  string or fret to move it there (you hear each new pitch); if it's part of a selection, the selected notes move
+  with it by the same strings and frets, so a chord shape slides up the neck intact. Clicking a note selects it.
+- **Timeline**: click to move the cursor (time + string), click notes to select and hear them (the cursor moves to the note, so the fretboard or keyboard shows it; Shift for multi), and drag across
   empty space to box-select. Dragging selected notes sideways moves them in time; dragging up or down transposes them
   (piano: one row per semitone; guitar/bass: notes stay on their strings and the fret changes, about 10 px per
   semitone; drums: moves hits to another kit piece). The selection moves as a group and stops at the instrument's
@@ -41,7 +43,11 @@ npm run build
   Palm muting is kept by copy/paste between guitar and bass tracks and in project files.
 - **Copying between instruments**: copied notes keep their real pitch, so you can paste them into a different kind
   of track. Into the same instrument with the same tuning, the fingering is kept as-is. Into piano, each note goes on
-  its key. Into guitar or bass, strings and frets are chosen for you: chord shapes stay compact, and a passage is
+  its key. Between guitar and bass (or two guitars tuned differently), the strings are lined up: a part on a
+  guitar's low B string goes on a 5-string bass's low B string with the same frets (an octave down, as bass parts
+  sound), E and A string parts go on the bass's E and A, and bass to guitar goes an octave up. Notes on strings
+  with no counterpart (a guitar's top strings on a bass) are fingered by pitch in the same octave. Otherwise
+  (from piano, or when no strings line up), strings and frets are chosen for you: chord shapes stay compact, and a passage is
   kept in one hand position where possible (e.g. piano C–Am–F–G voicings become the usual open and barre chords).
   Notes outside the instrument's range move by octaves, chords with more notes than strings lose inner voices, and
   the status bar says when either happened. Drum hits and pitched notes don't paste into each other.

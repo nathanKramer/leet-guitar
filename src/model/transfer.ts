@@ -100,7 +100,46 @@ export function placeClip(clip: Clip, target: Track): Placement {
     return result;
   }
 
+  if (isStringed(clip.kind)) return matchStrings(clip, target, result);
   return fretClip(clip.notes, target, result);
+}
+
+/** Octave offsets tried when lining up one stringed instrument's strings with another's, preferred first. */
+const STRING_OFFSETS = [0, -12, 12, -24, 24];
+
+/**
+ * Guitar/bass to a guitar/bass with different strings: line the strings up and keep the tab where they match.
+ * Find the whole-octave offset at which the most copied notes sit on a source string whose open pitch is one
+ * of the target's open strings (guitar to bass is usually an octave down: a guitar's low B string lands on a
+ * 5-string bass's low B, its E on the bass's E). Notes on those strings keep their fret. Notes on strings with
+ * no counterpart (a guitar's top strings on a bass) move by the same octave and are fingered by pitch, around
+ * the strings the matched notes already use. If no strings line up, everything is fingered by pitch.
+ */
+function matchStrings(clip: Clip, target: Track, result: Placement): Placement {
+  const counterpart = (n: ClipNote, offset: number) => {
+    const s = target.tuning.indexOf(clip.tuning[n.string] + offset);
+    return s >= 0 && n.fret <= target.frets ? s : -1;
+  };
+  let best = 0;
+  let bestCount = 0;
+  for (const offset of STRING_OFFSETS) {
+    const count = clip.notes.filter((n) => counterpart(n, offset) >= 0).length;
+    if (count > bestCount) (best = offset), (bestCount = count);
+  }
+  if (!bestCount) return fretClip(clip.notes, target, result);
+
+  const rest: ClipNote[] = [];
+  const taken = new Map<number, Set<number>>();
+  for (const n of clip.notes) {
+    const s = counterpart(n, best);
+    if (s < 0) {
+      rest.push({ ...n, pitch: n.pitch + best });
+      continue;
+    }
+    result.notes.push({ string: s, fret: n.fret, ...pick(n, 'offset', 'duration', 'velocity', 'palmMute') });
+    taken.set(n.offset, (taken.get(n.offset) ?? new Set()).add(s));
+  }
+  return rest.length ? fretClip(rest, target, result, taken) : result;
 }
 
 interface Spot {
@@ -140,8 +179,16 @@ function handPositions(spots: Array<Spot | null>): number[] | null {
   return out.length ? out : [hi];
 }
 
-/** Guitar/bass target: choose a string and fret for every note, for the whole passage at once. */
-function fretClip(notes: ClipNote[], target: Track, result: Placement): Placement {
+/**
+ * Guitar/bass target: choose a string and fret for every note, for the whole passage at once. `taken` lists
+ * strings already used at an offset (by notes placed some other way), which these notes must avoid.
+ */
+function fretClip(
+  notes: ClipNote[],
+  target: Track,
+  result: Placement,
+  taken: Map<number, Set<number>> = new Map(),
+): Placement {
   const lo = Math.min(...target.tuning);
   const hi = Math.max(...target.tuning) + target.frets;
   const byOffset = new Map<number, ClipNote[]>();
@@ -172,7 +219,8 @@ function fretClip(notes: ClipNote[], target: Track, result: Placement): Placemen
         result.dropped += group.length - keep.length;
         group = keep;
       }
-      return { offset, notes: group, options: fingerings(group.map((n) => n.pitch), target, CANDIDATES) };
+      const options = fingerings(group.map((n) => n.pitch), target, CANDIDATES, taken.get(offset));
+      return { offset, notes: group, options };
     });
 
   // Dynamic programming over (shape, hand position): the cheapest way through the whole passage.
@@ -233,11 +281,16 @@ function fretClip(notes: ClipNote[], target: Track, result: Placement): Placemen
  * Candidate shapes for a chord (pitches high to low), each note on its own string, cheapest first.
  * A note can be left out, at a high cost, when no shape fits all of them.
  */
-export function fingerings(pitches: number[], track: Pick<Track, 'tuning' | 'frets'>, limit: number): Fingering[] {
+export function fingerings(
+  pitches: number[],
+  track: Pick<Track, 'tuning' | 'frets'>,
+  limit: number,
+  blocked: Set<number> = new Set(),
+): Fingering[] {
   const options = pitches.map((p) =>
     track.tuning
       .map((open, string) => ({ string, fret: p - open }))
-      .filter((o) => o.fret >= 0 && o.fret <= track.frets),
+      .filter((o) => o.fret >= 0 && o.fret <= track.frets && !blocked.has(o.string)),
   );
   const found: Fingering[] = [];
   const chosen: Array<Spot | null> = [];

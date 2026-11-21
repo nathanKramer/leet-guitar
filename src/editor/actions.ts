@@ -165,11 +165,11 @@ export function deleteSelection() {
   else editor.set({ selection: [] });
 }
 
-/** Select just this note, put the cursor on its string, and sound it. */
+/** Select just this note, put the cursor on it (so the fretboard shows it), and sound it. */
 export function selectNote(id: ID) {
   const n = song().notes[id];
   if (!n) return;
-  editor.set({ selection: [id], cursorString: n.string });
+  editor.set({ selection: [id], cursor: n.start, cursorString: n.string });
   previewNote(id);
 }
 

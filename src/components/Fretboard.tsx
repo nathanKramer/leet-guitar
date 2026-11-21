@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
-import { placeNote } from '../editor/actions';
+import { audition, placeNote, previewNote, shiftSelection } from '../editor/actions';
+import { clampShift, type NoteShift } from '../model/commands';
+import { editor } from '../session';
 import { laneLabel } from '../model/drums';
 import { isStringed } from '../model/instruments';
 import { pitchClassName, pitchName } from '../model/music';
-import type { Song } from '../model/types';
+import type { ID, Song } from '../model/types';
 
 const W = 1200;
 const OPEN_W = 58;
@@ -23,6 +25,9 @@ interface Props {
 export function Fretboard({ song, ed }: Props) {
   const track = song.tracks[ed.trackId];
   const [hover, setHover] = useState<{ s: number; f: number } | null>(null);
+  /** Dragging notes to another string/fret: the grabbed note, the notes moving with it, and the shift so far. */
+  const [drag, setDrag] = useState<{ anchor: ID; ids: ID[]; shift: NoteShift } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   const geom = useMemo(() => {
     if (!track) return null;
@@ -53,6 +58,65 @@ export function Fretboard({ song, ed }: Props) {
     (n) => n.trackId === track.id && n.start <= focus && focus < n.start + n.duration,
   );
   const selected = new Set(ed.selection);
+  const moving = new Set(drag?.ids ?? []);
+
+  /** The string and fret under a mouse position (clamped to the board). */
+  const cellAt = (clientX: number, clientY: number) => {
+    const ctm = svgRef.current?.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    const s = Math.min(strings - 1, Math.max(0, Math.round((p.y - TOP) / SPACING)));
+    let f = 0;
+    while (f < N && p.x >= cellRight(f)) f++;
+    return { s, f };
+  };
+
+  /**
+   * Grab a note that starts at the cursor and drop it on another string/fret. If it's part of a selection,
+   * the selected notes move with it by the same number of strings and frets (a chord keeps its shape).
+   * A click without moving just selects the note (Shift adds or removes it).
+   */
+  const onNoteDown = (e: React.MouseEvent, id: ID) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const n = song.notes[id];
+    const st = editor.get();
+    const selection = e.shiftKey
+      ? st.selection.includes(id)
+        ? st.selection.filter((x) => x !== id)
+        : [...st.selection, id]
+      : st.selection.includes(id)
+        ? st.selection
+        : [id];
+    editor.set({ selection, cursorString: n.string });
+    if (!selection.includes(id)) return;
+    previewNote(id);
+    const from = { s: n.string, f: n.fret };
+    let shift: NoteShift = { ticks: 0, lanes: 0, frets: 0 };
+    setHover(null);
+    setDrag({ anchor: id, ids: selection, shift });
+    const onMove = (ev: MouseEvent) => {
+      const cell = cellAt(ev.clientX, ev.clientY);
+      if (!cell) return;
+      const next = clampShift(song, selection, { ticks: 0, lanes: cell.s - from.s, frets: cell.f - from.f });
+      if (next.lanes === shift.lanes && next.frets === shift.frets) return;
+      shift = next;
+      setDrag({ anchor: id, ids: selection, shift });
+      audition(track.id, track.tuning[from.s + shift.lanes] + from.f + shift.frets);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      setDrag(null);
+      if (shift.lanes || shift.frets) {
+        shiftSelection(shift);
+        editor.set({ cursorString: from.s + shift.lanes });
+      }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   // Inlays sit in the middle of the neck; double dots one string-gap either side (works for 4 or 6 strings).
   const midY = (stringY(0) + stringY(strings - 1)) / 2;
@@ -60,7 +124,13 @@ export function Fretboard({ song, ed }: Props) {
 
   return (
     <div className="fretboard">
-      <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="xMidYMid meet" onMouseLeave={() => setHover(null)}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        className={drag ? 'dragging' : undefined}
+        onMouseLeave={() => setHover(null)}
+      >
         <defs>
           <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#4a3424" />
@@ -120,7 +190,7 @@ export function Fretboard({ song, ed }: Props) {
               width={cellRight(f) - cellLeft(f)}
               height={SPACING}
               className="fb-hit"
-              onMouseEnter={() => setHover({ s, f })}
+              onMouseEnter={() => !drag && setHover({ s, f })}
               onMouseDown={(e) => {
                 e.preventDefault();
                 placeNote(s, f, { advance: !e.shiftKey });
@@ -132,9 +202,23 @@ export function Fretboard({ song, ed }: Props) {
         {sounding.map((n) => {
           // Notes struck exactly at the cursor are bright; notes ringing over from earlier are dimmed.
           const isStart = ed.playing || n.start === ed.cursor;
-          const cls = ['fb-note', selected.has(n.id) ? 'selected' : '', isStart ? 'onset' : 'sustain'].join(' ');
+          // Notes starting at the cursor can be dragged; ones ringing over from earlier let clicks through,
+          // so clicking there still places a note.
+          const grabbable = isStart && !ed.playing;
+          const cls = [
+            'fb-note',
+            selected.has(n.id) ? 'selected' : '',
+            isStart ? 'onset' : 'sustain',
+            grabbable ? 'grabbable' : '',
+            moving.has(n.id) ? 'moving' : '',
+          ].join(' ');
           return (
-            <g key={n.id} className={cls} pointerEvents="none">
+            <g
+              key={n.id}
+              className={cls}
+              pointerEvents={grabbable ? undefined : 'none'}
+              onMouseDown={grabbable ? (e) => onNoteDown(e, n.id) : undefined}
+            >
               <circle cx={centerX(n.fret)} cy={stringY(n.string)} r={11} />
               <text x={centerX(n.fret)} y={stringY(n.string) + 4}>
                 {pitchClassName(track.tuning[n.string] + n.fret)}
@@ -142,6 +226,23 @@ export function Fretboard({ song, ed }: Props) {
             </g>
           );
         })}
+
+        {drag &&
+          (drag.shift.lanes !== 0 || drag.shift.frets !== 0) &&
+          sounding.map((n) => {
+            if (!moving.has(n.id)) return null;
+            const id = n.id;
+            const s = n.string + drag.shift.lanes;
+            const f = n.fret + drag.shift.frets;
+            return (
+              <g key={id} className="fb-note onset selected drop" pointerEvents="none">
+                <circle cx={centerX(f)} cy={stringY(s)} r={11} />
+                <text x={centerX(f)} y={stringY(s) + 4}>
+                  {pitchClassName(track.tuning[s] + f)}
+                </text>
+              </g>
+            );
+          })}
 
         {hover && (
           <g className="fb-ghost" pointerEvents="none">
@@ -159,10 +260,22 @@ export function Fretboard({ song, ed }: Props) {
         ))}
       </svg>
       <div className="fb-status">
-        {hover ? (
+        {drag && song.notes[drag.anchor] ? (
+          (() => {
+            const n = song.notes[drag.anchor];
+            const s = n.string + drag.shift.lanes;
+            const f = n.fret + drag.shift.frets;
+            return (
+              <>
+                Moving to string {s + 1} · Fret {f} · <b>{pitchName(track.tuning[s] + f)}</b>
+                {drag.ids.length > 1 && <span className="muted"> — {drag.ids.length} notes move together</span>}
+              </>
+            );
+          })()
+        ) : hover ? (
           <>
             String {hover.s + 1} · Fret {hover.f} · <b>{pitchName(track.tuning[hover.s] + hover.f)}</b>
-            <span className="muted"> — click to place, shift-click to stack a chord</span>
+            <span className="muted"> — click to place, shift-click to stack a chord; drag a note to move it</span>
           </>
         ) : (
           <span className="muted">

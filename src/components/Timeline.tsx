@@ -8,7 +8,7 @@ import { visibleLanes } from '../model/lanes';
 import { isBlackKey, pitchName } from '../model/music';
 import { clampShift, type NoteShift } from '../model/commands';
 import type { ID, Note, Song } from '../model/types';
-import { editor } from '../session';
+import { docStore, editor } from '../session';
 import type { PeerState } from '../sync/awareness';
 
 const RULER_H = 22;
@@ -178,7 +178,12 @@ export function Timeline({ song, ed, peers }: Props) {
     };
     const onUp = () => {
       const d = dragRef.current;
-      if (d) shiftSelection(shiftRef.current(d));
+      if (d) {
+        shiftSelection(shiftRef.current(d));
+        // Follow the grabbed note to where it landed.
+        const moved = docStore.getSong().notes[d.anchor];
+        if (moved) editor.set({ cursor: moved.start, cursorString: moved.string });
+      }
       setDrag(null);
     };
     window.addEventListener('mousemove', onMove);
@@ -277,7 +282,8 @@ export function Timeline({ song, ed, peers }: Props) {
       selection = st.selection.includes(id) ? st.selection : [id];
     }
     const n = song.notes[id];
-    editor.set({ selection, cursorString: n.string });
+    // Selecting a note puts the cursor on it, so the fretboard / keyboard shows it.
+    editor.set(selection.includes(id) ? { selection, cursor: n.start, cursorString: n.string } : { selection });
     if (selection.includes(id)) previewNote(id);
     if (selection.includes(id)) setDrag({ ids: selection, anchor: id, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 });
   };

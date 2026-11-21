@@ -199,6 +199,16 @@ main > * {
   stroke: #000;
   stroke-opacity: 0.4;
 }
+.fb-note.grabbable {
+  cursor: grab;
+}
+.fretboard svg.dragging,
+.fretboard svg.dragging * {
+  cursor: grabbing !important;
+}
+.fb-note.moving {
+  opacity: 0.35;
+}
 .fb-note.sustain circle {
   fill: #7a5a24;
 }

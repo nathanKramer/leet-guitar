@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addNote, addTrack, copyNotes, DEFAULT_TRACK_ID, initDocument, pasteNotes } from './commands';
+import { addNote, addTrack, copyNotes, DEFAULT_TRACK_ID, initDocument, pasteNotes, setTuning } from './commands';
 import { notePitch } from './drums';
 import { PIANO_KEYS, STANDARD_TUNING } from './music';
 import { DocumentStore } from './store';
@@ -125,5 +125,70 @@ describe('bestFingering', () => {
     expect(f.every(Boolean)).toBe(true);
     f.forEach((spot, i) => expect(STANDARD_TUNING[spot!.string] + spot!.fret).toBe(pitches[i]));
     expect(f.map((x) => x!.fret)).toEqual([0, 0, 1, 2, 2, 0]);
+  });
+});
+
+describe('guitar and bass strings line up', () => {
+  const B_STANDARD = [59, 54, 50, 45, 40, 35];
+  const BASS_5 = [43, 38, 33, 28, 23];
+  /** [string, fret] of a track's notes in time order. */
+  const tab = (song: Song, trackId: ID) =>
+    Object.values(song.notes)
+      .filter((n) => n.trackId === trackId)
+      .sort((a, b) => a.start - b.start || a.string - b.string)
+      .map((n) => [n.string, n.fret]);
+
+  it('B standard guitar, low B string, to a 5-string bass: same frets on the low B', () => {
+    const { s, ids } = setup();
+    s.transact(setTuning(s.getSong(), ids.guitar, B_STANDARD).ops);
+    s.transact(setTuning(s.getSong(), ids.bass, BASS_5).ops);
+    const riff = [0, 0, 3, 5, 0, 7].map((fret, i) => add(s, ids.guitar, 5, fret, i * 240, 240));
+    const r = copyPaste(s, riff, ids.bass);
+    expect(tab(s.getSong(), ids.bass)).toEqual([0, 0, 3, 5, 0, 7].map((f) => [4, f]));
+    expect(r.placement.octaveShifted).toBe(0);
+  });
+
+  it('E standard guitar to 4-string bass: E and A string parts stay on E and A, an octave down', () => {
+    const { s, ids } = setup();
+    const notes = [add(s, ids.guitar, 5, 3, 0), add(s, ids.guitar, 4, 5, 480), add(s, ids.guitar, 3, 2, 960)];
+    copyPaste(s, notes, ids.bass);
+    expect(tab(s.getSong(), ids.bass)).toEqual([
+      [3, 3],
+      [2, 5],
+      [1, 2],
+    ]);
+  });
+
+  it('fingers notes on strings the bass lacks by pitch, without doubling up a string', () => {
+    const { s, ids } = setup();
+    // A power chord on the low strings plus a note on the high e string, all at once.
+    const chord = [add(s, ids.guitar, 5, 5), add(s, ids.guitar, 4, 7), add(s, ids.guitar, 0, 5)];
+    copyPaste(s, chord, ids.bass);
+    const placed = tab(s.getSong(), ids.bass);
+    expect(placed).toContainEqual([3, 5]);
+    expect(placed).toContainEqual([2, 7]);
+    expect(new Set(placed.map(([string]) => string)).size).toBe(3);
+    const pitches = sounding(s.getSong(), ids.bass).map(([, p]) => p);
+    expect(pitches).toContain(69 - 12); // the high A, an octave down like the rest
+  });
+
+  it('bass to guitar goes an octave up onto the matching strings', () => {
+    const { s, ids } = setup();
+    const line = [add(s, ids.bass, 3, 0), add(s, ids.bass, 2, 2, 480)];
+    copyPaste(s, line, ids.guitar);
+    expect(tab(s.getSong(), ids.guitar)).toEqual([
+      [5, 0],
+      [4, 2],
+    ]);
+  });
+
+  it('keeps pitches when no strings line up (E standard to B standard guitar)', () => {
+    const { s, ids } = setup();
+    const { ops, id: other } = addTrack(s.getSong(), 'guitar');
+    s.transact(ops);
+    s.transact(setTuning(s.getSong(), other, B_STANDARD).ops);
+    const n = [add(s, ids.guitar, 5, 3), add(s, ids.guitar, 2, 0, 480)];
+    copyPaste(s, n, other);
+    expect(sounding(s.getSong(), other)).toEqual(sounding(s.getSong(), ids.guitar));
   });
 });
