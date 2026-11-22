@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addNote, addTrack, initDocument, setMeta, setTuning, sortedTracks } from './commands';
-import { openProjectOps, parseProject, projectFileName, serializeProject } from './project';
+import { newProjectOps, openProjectOps, parseProject, projectFileName, serializeProject } from './project';
 import { DocumentStore } from './store';
 import type { Song } from './types';
 
@@ -29,13 +29,19 @@ function sampleSong() {
   s.transact(setMeta({ title: 'Riff', bpm: 140, beatsPerBar: 7, beatUnit: 8 }));
   s.transact(setTuning(s.getSong(), guitar, [62, 57, 53, 48, 43, 38, 31]).ops);
   s.transact(addNote(s.getSong(), { trackId: guitar, string: 6, fret: 3, start: 0, duration: 160, velocity: 90 }).ops);
-  s.transact(addNote(s.getSong(), { trackId: guitar, string: 0, fret: 12, start: 480, duration: 240, velocity: 96 }).ops);
+  s.transact(
+    addNote(s.getSong(), { trackId: guitar, string: 0, fret: 12, start: 480, duration: 240, velocity: 96 }).ops,
+  );
   const drums = addTrack(s.getSong(), 'drums');
   s.transact(drums.ops);
-  s.transact(addNote(s.getSong(), { trackId: drums.id, string: 8, fret: 0, start: 0, duration: 120, velocity: 110 }).ops);
+  s.transact(
+    addNote(s.getSong(), { trackId: drums.id, string: 8, fret: 0, start: 0, duration: 120, velocity: 110 }).ops,
+  );
   const piano = addTrack(s.getSong(), 'piano');
   s.transact(piano.ops);
-  s.transact(addNote(s.getSong(), { trackId: piano.id, string: 39, fret: 0, start: 960, duration: 1920, velocity: 80 }).ops);
+  s.transact(
+    addNote(s.getSong(), { trackId: piano.id, string: 39, fret: 0, start: 960, duration: 1920, velocity: 80 }).ops,
+  );
   return s;
 }
 
@@ -53,12 +59,25 @@ describe('project files', () => {
     const src = sampleSong();
     const dst = newStore('b');
     const guitar = sortedTracks(dst.getSong())[0].id;
-    dst.transact(addNote(dst.getSong(), { trackId: guitar, string: 2, fret: 5, start: 0, duration: 480, velocity: 96 }).ops);
+    dst.transact(
+      addNote(dst.getSong(), { trackId: guitar, string: 2, fret: 5, start: 0, duration: 480, velocity: 96 }).ops,
+    );
     const before = shape(dst.getSong());
     dst.transact(openProjectOps(dst.getSong(), parseProject(serializeProject(src.getSong()))).ops);
     expect(shape(dst.getSong())).toEqual(shape(src.getSong()));
     dst.undo();
     expect(shape(dst.getSong())).toEqual(before);
+  });
+
+  it('a new project is a blank song like a fresh document, and undoes in one step', () => {
+    const s = sampleSong();
+    const before = shape(s.getSong());
+    const { ops, firstTrackId } = newProjectOps(s.getSong());
+    s.transact(ops);
+    expect(shape(s.getSong())).toEqual(shape(newStore('b').getSong()));
+    expect(Object.keys(s.getSong().tracks)).toEqual([firstTrackId]);
+    s.undo();
+    expect(shape(s.getSong())).toEqual(before);
   });
 
   it('opening the same file twice gives the same song', () => {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as act from '../editor/actions';
 import { useStore, type EditorState } from '../editor/editorStore';
-import { openProject, saveProject } from '../editor/project';
+import { newProject, openProject, saveProject } from '../editor/project';
 import { loadSoundFontFile, removeSoundFont, setSource, sound, type SoundSource } from '../editor/sound';
 import { downloadMidi, type ChannelMode } from '../midi/export';
 import { setMeta } from '../model/commands';
@@ -11,7 +11,14 @@ import type { Song } from '../model/types';
 import { awareness, docStore, editor } from '../session';
 import type { PeerState } from '../sync/awareness';
 
-const DURATION_KEYS = { whole: 'W', half: 'H', quarter: 'Q', eighth: 'E', sixteenth: 'S', thirtysecond: '[ / ]' } as const;
+const DURATION_KEYS = {
+  whole: 'W',
+  half: 'H',
+  quarter: 'Q',
+  eighth: 'E',
+  sixteenth: 'S',
+  thirtysecond: '[ / ]',
+} as const;
 
 /** Text input that commits on blur / Enter, so typing doesn't create an edit per keystroke. */
 function CommitInput(props: {
@@ -58,6 +65,9 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
           title="Song title"
           onCommit={(v) => docStore.transact(setMeta({ title: v }))}
         />
+        <button onClick={newProject} title="Start a new, empty project (Ctrl+Z undoes this)">
+          New
+        </button>
         <button onClick={() => void openProject()} title="Open a project file (Ctrl+O), or drop one on the page">
           Open…
         </button>
@@ -199,14 +209,13 @@ function SoundControl() {
   const st = useStore(sound);
   const fileRef = useRef<HTMLInputElement>(null);
   return (
-    <div className="group sound" title="Playback sound. A SoundFont is loaded from your computer and kept in this browser only.">
+    <div
+      className="group sound"
+      title="Playback sound. A SoundFont is loaded from your computer and kept in this browser only."
+    >
       <label className="field">
         Sound
-        <select
-          value={st.source}
-          disabled={st.loading}
-          onChange={(e) => setSource(e.target.value as SoundSource)}
-        >
+        <select value={st.source} disabled={st.loading} onChange={(e) => setSource(e.target.value as SoundSource)}>
           <option value="builtin">Built-in synth</option>
           {st.fontName && <option value="soundfont">{st.fontName}</option>}
         </select>

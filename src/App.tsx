@@ -4,7 +4,7 @@ import { Fretboard } from './components/Fretboard';
 import { PianoKeys } from './components/PianoKeys';
 import { Timeline } from './components/Timeline';
 import { Toolbar } from './components/Toolbar';
-import { TrackBar } from './components/TrackBar';
+import { TrackList } from './components/TrackList';
 import { selectTrack } from './editor/actions';
 import { useStore } from './editor/editorStore';
 import { handleKeyDown } from './editor/keyboard';
@@ -62,52 +62,54 @@ export default function App() {
   return (
     <div className="app">
       <Toolbar song={song} ed={ed} peers={peers} />
-      <main>
-        <TrackBar song={song} ed={ed} />
-        <Fretboard song={song} ed={ed} />
-        <PianoKeys song={song} ed={ed} />
-        <DrumPads song={song} ed={ed} />
-        <Timeline song={song} ed={ed} peers={peers} />
-        <footer className="statusbar">
-          <span>
-            Cursor <b>{position(ed.cursor, song.meta.beatsPerBar, song.meta.beatUnit)}</b>
-          </span>
-          {ed.notice && (
-            <span className="notice" role="status">
-              {ed.notice}
+      <div className="workspace">
+        <TrackList song={song} ed={ed} />
+        <main>
+          <Fretboard song={song} ed={ed} />
+          <PianoKeys song={song} ed={ed} />
+          <DrumPads song={song} ed={ed} />
+          <Timeline song={song} ed={ed} peers={peers} />
+          <footer className="statusbar">
+            <span>
+              Cursor <b>{position(ed.cursor, song.meta.beatsPerBar, song.meta.beatUnit)}</b>
             </span>
-          )}
-          <span>
-            {sel.length ? (
-              <>
-                {sel.length} selected
-                {selDur && ` · ${DURATION_NAMES[selDur.base]}${selDur.triplet ? ' triplet' : ''}`}
-              </>
-            ) : (
-              'No selection'
+            {ed.notice && (
+              <span className="notice" role="status">
+                {ed.notice}
+              </span>
             )}
-          </span>
-          {song.tracks[ed.trackId]?.kind === 'piano' ? (
-            <span className="keys">
-              <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> key ·{' '}
-              <kbd>Alt ↑↓</kbd> semitone · <kbd>Shift ↑↓</kbd> octave · <kbd>Alt ←→</kbd> move notes ·{' '}
-              <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+            <span>
+              {sel.length ? (
+                <>
+                  {sel.length} selected
+                  {selDur && ` · ${DURATION_NAMES[selDur.base]}${selDur.triplet ? ' triplet' : ''}`}
+                </>
+              ) : (
+                'No selection'
+              )}
             </span>
-          ) : song.tracks[ed.trackId]?.kind === 'drums' ? (
-            <span className="keys">
-              <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>1-9</kbd> pads · <kbd>←→</kbd> cursor ·{' '}
-              <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
-            </span>
-          ) : (
-            <span className="keys">
-              <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>0-9</kbd> type fret ·{' '}
-              <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± ·{' '}
-              <kbd>Alt ←→↑↓</kbd> move notes · <kbd>P</kbd> palm mute · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play ·{' '}
-              <kbd>Del</kbd> delete
-            </span>
-          )}
-        </footer>
-      </main>
+            {song.tracks[ed.trackId]?.kind === 'piano' ? (
+              <span className="keys">
+                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> key ·{' '}
+                <kbd>Alt ↑↓</kbd> semitone · <kbd>Shift ↑↓</kbd> octave · <kbd>Alt ←→</kbd> move notes ·{' '}
+                <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+              </span>
+            ) : song.tracks[ed.trackId]?.kind === 'drums' ? (
+              <span className="keys">
+                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>1-9</kbd> pads · <kbd>←→</kbd> cursor ·{' '}
+                <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+              </span>
+            ) : (
+              <span className="keys">
+                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>0-9</kbd> type fret ·{' '}
+                <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± ·{' '}
+                <kbd>Alt ←→↑↓</kbd> move notes · <kbd>P</kbd> palm mute · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play ·{' '}
+                <kbd>Del</kbd> delete
+              </span>
+            )}
+          </footer>
+        </main>
+      </div>
     </div>
   );
 }

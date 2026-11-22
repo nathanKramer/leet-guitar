@@ -4,8 +4,17 @@
  * Where the browser supports the File System Access API (Chromium), Save writes back to the file that was last
  * opened or saved, like a desktop app. Elsewhere, Save downloads a copy and Open uses a file input.
  */
+import type { Op } from '../model/crdt';
 import { TRACK_KINDS } from '../model/instruments';
-import { openProjectOps, parseProject, PROJECT_EXT, projectFileName, serializeProject } from '../model/project';
+import {
+  newProjectOps,
+  openProjectOps,
+  parseProject,
+  PROJECT_EXT,
+  projectFileName,
+  serializeProject,
+} from '../model/project';
+import type { ID } from '../model/types';
 import { docStore, editor } from '../session';
 import { notify, stop } from './actions';
 
@@ -46,7 +55,8 @@ export async function saveProject(saveAs = false) {
     return;
   }
   try {
-    const handle = (!saveAs && currentFile) || (await window.showSaveFilePicker({ suggestedName: name, types: PICKER_TYPES }));
+    const handle =
+      (!saveAs && currentFile) || (await window.showSaveFilePicker({ suggestedName: name, types: PICKER_TYPES }));
     const out = await handle.createWritable();
     await out.write(projectBlob());
     await out.close();
@@ -78,6 +88,26 @@ export async function openProject() {
   input.click();
 }
 
+/** Apply ops that replace the whole song, and put the editor at the start of its first track. */
+function replaceSong({ ops, firstTrackId }: { ops: Op[]; firstTrackId: ID }) {
+  if (editor.get().playing) stop();
+  docStore.transact(ops);
+  const first = docStore.getSong().tracks[firstTrackId];
+  editor.set({
+    trackId: firstTrackId,
+    cursor: 0,
+    cursorString: first ? TRACK_KINDS[first.kind].homeLane : 0,
+    selection: [],
+  });
+}
+
+/** Start a blank song (undoable). The next Save asks where to save, rather than overwriting the last file. */
+export function newProject() {
+  replaceSong(newProjectOps(docStore.getSong()));
+  currentFile = null;
+  notify('Started a new project. Ctrl+Z brings the previous song back.');
+}
+
 /** Replace the song with a project file's contents. Returns false (with a message) if it can't be opened. */
 export async function loadProjectFile(file: File): Promise<boolean> {
   let project;
@@ -87,17 +117,10 @@ export async function loadProjectFile(file: File): Promise<boolean> {
     notify(`Couldn't open ${file.name}: ${(e as Error).message}`);
     return false;
   }
-  if (editor.get().playing) stop();
-  const { ops, firstTrackId } = openProjectOps(docStore.getSong(), project);
-  docStore.transact(ops);
-  const first = docStore.getSong().tracks[firstTrackId];
-  editor.set({
-    trackId: firstTrackId,
-    cursor: 0,
-    cursorString: first ? TRACK_KINDS[first.kind].homeLane : 0,
-    selection: [],
-  });
-  const skipped = project.skipped ? ` ${project.skipped} invalid note${project.skipped === 1 ? ' was' : 's were'} left out.` : '';
+  replaceSong(openProjectOps(docStore.getSong(), project));
+  const skipped = project.skipped
+    ? ` ${project.skipped} invalid note${project.skipped === 1 ? ' was' : 's were'} left out.`
+    : '';
   notify(`Opened ${file.name}.${skipped} Ctrl+Z undoes this.`);
   return true;
 }

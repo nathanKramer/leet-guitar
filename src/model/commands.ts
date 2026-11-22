@@ -28,7 +28,7 @@ export function initDocument(song: Song): Op[] {
   return ops;
 }
 
-function newTrack(kind: TrackKind, name: string, order: number): Omit<Track, 'id'> {
+export function newTrack(kind: TrackKind, name: string, order: number): Omit<Track, 'id'> {
   return { kind, name, order, ...TRACK_KINDS[kind].defaults };
 }
 

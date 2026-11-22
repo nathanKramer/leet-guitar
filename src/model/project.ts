@@ -8,7 +8,7 @@
 import type { Op } from './crdt';
 import { newId } from './id';
 import { DEFAULT_META, META_ID } from './materialize';
-import { sortedTracks } from './commands';
+import { newTrack, sortedTracks } from './commands';
 import type { ID, Note, Song, SongMeta, Track, TrackKind } from './types';
 
 export const PROJECT_FORMAT = 'leet-guitar';
@@ -116,9 +116,7 @@ export function parseProject(text: string): ParsedProject {
  * file twice (or a file saved from this document) never collides with records that were just deleted.
  */
 export function openProjectOps(song: Song, project: ParsedProject): { ops: Op[]; firstTrackId: ID } {
-  const ops: Op[] = [];
-  for (const id of Object.keys(song.notes)) ops.push({ t: 'del', coll: 'notes', id });
-  for (const id of Object.keys(song.tracks)) ops.push({ t: 'del', coll: 'tracks', id });
+  const ops = clearOps(song);
   ops.push({ t: 'patch', coll: 'meta', id: META_ID, patch: { ...project.meta } });
 
   const trackIds = new Map<ID, ID>();
@@ -133,8 +131,29 @@ export function openProjectOps(song: Song, project: ParsedProject): { ops: Op[];
   return { ops, firstTrackId: trackIds.get(project.tracks[0].id)! };
 }
 
+/** Ops that delete every track and note in `song`. */
+function clearOps(song: Song): Op[] {
+  return [
+    ...Object.keys(song.notes).map((id): Op => ({ t: 'del', coll: 'notes', id })),
+    ...Object.keys(song.tracks).map((id): Op => ({ t: 'del', coll: 'tracks', id })),
+  ];
+}
+
+/** Ops that replace everything in `song` with a blank project: default title and tempo, one empty guitar track. */
+export function newProjectOps(song: Song): { ops: Op[]; firstTrackId: ID } {
+  const id = newId();
+  const ops = clearOps(song);
+  ops.push({ t: 'patch', coll: 'meta', id: META_ID, patch: { ...DEFAULT_META } });
+  ops.push({ t: 'put', coll: 'tracks', id, value: { ...newTrack('guitar', 'Guitar', 0) } });
+  return { ops, firstTrackId: id };
+}
+
 /** A file name for the project, from the song title. */
 export function projectFileName(title: string): string {
-  const base = title.trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ') || 'Untitled';
+  const base =
+    title
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, '')
+      .replace(/\s+/g, ' ') || 'Untitled';
   return base + PROJECT_EXT;
 }

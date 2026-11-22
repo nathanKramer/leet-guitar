@@ -51,18 +51,22 @@ npm run build
   kept in one hand position where possible (e.g. piano C–Am–F–G voicings become the usual open and barre chords).
   Notes outside the instrument's range move by octaves, chords with more notes than strings lose inner voices, and
   the status bar says when either happened. Drum hits and pitched notes don't paste into each other.
-- **Tracks**: add guitar, bass, piano or drum tracks from the tab bar. Bass tracks are 4-string (E A D G), 24 frets, and
-  work exactly like guitar tracks: fretboard, typed frets, moving notes between strings at the same pitch. Double-click a tab to rename it; **M** mutes it during
+- **Tracks**: the track list on the left shows every track with its sound (e.g. "Steel Guitar · E Std · 12
+  notes"); click one to edit it, and the selected track shows its instrument menu and tuning button. **+ Add track**
+  adds a guitar, bass, piano or drum track, or searches for any other instrument (below). The list scrolls when there
+  are many tracks, and sits above the editor on narrow screens. Bass tracks are 4-string (E A D G), 24 frets, and
+  work exactly like guitar tracks: fretboard, typed frets, moving notes between strings at the same pitch.
+  Double-click a track's name to rename it; **M** mutes it during
   playback and **S** solos it: while any track is soloed, only soloed tracks play (Alt-click **S** to solo just
   that track; mute still wins). Both are just for you, not saved in the song, and take effect immediately, even
   mid-playback; **×** deletes it along with its notes (undoable).
-- **Tunings**: the tuning button on an active guitar or bass tab (e.g. **E Std**) opens presets — 6-string
+- **Tunings**: the tuning button on the selected guitar or bass track (e.g. **E Std**) opens presets — 6-string
   (Standard, E♭/D/C/B Standard, Drop D/C/B, DADGAD, Open G, Open D), 7-string (Standard B, Drop A, A Standard) and
   bass (Standard, Drop D, D Standard, 5-string B) — or set each string a semitone at a time and add or remove a low
   string (4–8 strings) for a custom tuning. Retuning keeps every note's string and fret, like retuning a real
   instrument, so the tab stays the same and the pitches follow. Notes on a removed string move to another string at
   the same pitch where possible; the status bar reports any that couldn't.
-- **Other instruments**: **+ Instrument…** adds a track for any melodic instrument (kalimba, strings, flute,
+- **Other instruments**: **+ Add track** can also add a track for any melodic instrument (kalimba, strings, flute,
   synth pads, …). With a SoundFont loaded it lists the font's own presets, including variations in other banks
   (e.g. Ukulele, 12-String Guitar), searchable and grouped by General MIDI family; without one it lists the 128
   General MIDI instruments. Guitars and basses get a fretboard track, everything else a piano-roll track. A
@@ -80,13 +84,13 @@ npm run build
   from your computer for more realistic sound; the app never downloads or hosts one. The file is kept in this
   browser (IndexedDB) for next time, you can switch back to the built-in synth from the **Sound** menu, and **×**
   removes it. This is a local setting and isn't shared with collaborators. With a SoundFont loaded, the instrument
-  menu on the active track tab is audible: guitar tones (nylon, steel, clean, overdrive, distortion, …), bass tones
+  menu on the selected track is audible: guitar tones (nylon, steel, clean, overdrive, distortion, …), bass tones
   (finger, pick, fretless, slap, synth, …), piano-family sounds (grand, electric grand, Rhodes, harpsichord, …) or
   drum kits
   (standard, room, jazz, brush, …). The choice is saved in the song and included in MIDI exports.
 - **Projects**: **Save** (`Ctrl+S`) writes the whole song to a `.leetguitar` file, and **Open…** (`Ctrl+O`, or
-  drop a file on the page) loads one. In Chromium browsers Save then keeps writing to that same file
-  (`Ctrl+Shift+S` saves a copy elsewhere); in other browsers Save downloads a copy. Opening a project replaces the
+  drop a file on the page) loads one. **New** starts a blank song with one guitar track. In Chromium browsers Save then keeps writing to that same file
+  (`Ctrl+Shift+S` saves a copy elsewhere); in other browsers Save downloads a copy. Opening or starting a project replaces the
   current song for everyone editing it, as one edit that `Ctrl+Z` undoes. The song is also kept in this browser
   automatically, so files are for backups, moving between machines and sharing. A project keeps everything; MIDI
   export leaves out strings and frets, tunings, track kinds and names.
@@ -131,7 +135,7 @@ src/audio/      Playback
   builtin.ts      Default engine: Karplus–Strong plucked string, additive piano (piano.ts), synthesized drums
   soundfont.ts    SoundFont engine (spessasynth_lib), lazy-loaded on first use
 src/midi/       Standard MIDI File writer; channels.ts maps tracks to MIDI channels for export and playback
-src/components/ Toolbar, TrackBar, Fretboard, PianoKeys, DrumPads, Timeline
+src/components/ Toolbar, TrackList, Fretboard, PianoKeys, DrumPads, Timeline
 ```
 
 ### Collaboration

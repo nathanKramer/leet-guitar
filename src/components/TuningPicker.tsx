@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { setTuning } from '../editor/actions';
+import { useAnchoredPopover } from './popover';
 import { pitchName } from '../model/music';
 import {
   matchPreset,
@@ -16,6 +17,8 @@ import type { Track } from '../model/types';
 export function TuningPicker({ track }: { track: Track }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const style = useAnchoredPopover(open, buttonRef, 300);
 
   useEffect(() => {
     if (!open) return;
@@ -44,6 +47,7 @@ export function TuningPicker({ track }: { track: Track }) {
   return (
     <div className="tuning" ref={ref}>
       <button
+        ref={buttonRef}
         className="tab-btn tuning-btn"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
@@ -52,7 +56,7 @@ export function TuningPicker({ track }: { track: Track }) {
         {tuningLabel(track.kind, tuning)}
       </button>
       {open && (
-        <div className="tuning-pop" role="dialog" aria-label={`${track.name} tuning`}>
+        <div className="tuning-pop" style={style} role="dialog" aria-label={`${track.name} tuning`}>
           <label className="field">
             Preset
             <select
