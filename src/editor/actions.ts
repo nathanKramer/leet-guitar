@@ -71,11 +71,6 @@ export function setFret(id: ID, fret: number) {
   player.preview(song(), n.trackId, track.tuning[n.string] + fret);
 }
 
-/** Narrowest spacing (px) between grid steps before the timeline shows fewer bars per row. */
-const MIN_STEP_PX = 14;
-/** Timeline width taken by the lane labels and margin, roughly. */
-const ROW_CHROME_PX = 60;
-
 /** Ticks covered by one timeline row. */
 export const rowTicks = () => ed().barsPerRow * barTicks(song().meta);
 
@@ -85,15 +80,7 @@ export const rowTicks = () => ed().barsPerRow * barTicks(song().meta);
  */
 export function setDuration(base: BaseDuration, triplet = ed().triplet) {
   const ticks = durationTicks(base, triplet);
-  const bar = barTicks(song().meta);
-  const fits = (bars: number) => ((ed().rowWidth - ROW_CHROME_PX) / (bars * bar)) * ticks >= MIN_STEP_PX;
-  editor.set((s) => ({
-    base,
-    triplet,
-    barsPerRow: fits(s.barsPerRow)
-      ? s.barsPerRow
-      : ([...BARS_PER_ROW].reverse().find((b) => b < s.barsPerRow && fits(b)) ?? BARS_PER_ROW[0]),
-  }));
+  editor.set({ base, triplet });
   const sel = liveSelection();
   if (!sel.length) return;
   const notes = sel.map((id) => song().notes[id]);

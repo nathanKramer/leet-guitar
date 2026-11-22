@@ -24,8 +24,8 @@ npm run build
   range, so chords keep their shape. The grabbed note sounds at each new pitch.
 - **Rows**: the song is laid out in rows of 4 bars, stacked like a page and scrolled vertically; click anywhere in
   any row to put the cursor there. `PgUp`/`PgDn` move the cursor a row, and the view follows the cursor (and the
-  playhead during playback). The toolbar's −/+ sets bars per row (1, 2, 4 or 8); picking a short note value on a
-  narrow window drops to fewer bars per row so the grid stays clickable. Notes that run past the end of a row
+  playhead during playback). The toolbar's −/+ sets bars per row (1, 2, 4 or 8); with short note values on a
+  narrow window, fewer bars per row make the grid easier to click. Notes that run past the end of a row
   continue at the start of the next (drawn dashed).
 - **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet. Changing the value resizes any selected notes, including
   the one you just entered; if they end at the cursor, the cursor moves with them. Press `Esc` first to change the
