@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addNote, DEFAULT_TRACK_ID, initDocument, moveNotes, moveToString, setMeta } from './commands';
+import { addNote, DEFAULT_TRACK_ID, initDocument, moveNotes, moveToString, resizeNotes, setMeta } from './commands';
 import { applyOp, emptyState, mergeState, type StampedOp } from './crdt';
 import { BASE_TICKS, describeDuration, durationTicks, PPQ, stepDuration } from './durations';
 import { materialize } from './materialize';
@@ -135,6 +135,21 @@ describe('DocumentStore', () => {
 });
 
 describe('commands', () => {
+  it('resizes notes by the same amount, stopping at the next note on the string and at a minimum', () => {
+    const s = newStore('a');
+    const a = addNote(s.getSong(), noteAt(0, 0, 3, 240));
+    s.transact(a.ops);
+    const b = addNote(s.getSong(), noteAt(0, 1, 3, 480));
+    s.transact(b.ops);
+    s.transact(addNote(s.getSong(), noteAt(600, 0, 5, 240)).ops);
+    s.transact(resizeNotes(s.getSong(), [a.id, b.id], 480, 120));
+    expect(s.getSong().notes[a.id].duration).toBe(600); // stopped by the note at 600
+    expect(s.getSong().notes[b.id].duration).toBe(960);
+    s.transact(resizeNotes(s.getSong(), [a.id, b.id], -2000, 120));
+    expect(s.getSong().notes[a.id].duration).toBe(120);
+    expect(s.getSong().notes[b.id].duration).toBe(120);
+  });
+
   it('a new note on the same string cuts off a ringing note', () => {
     const s = newStore('a');
     const first = addNote(s.getSong(), noteAt(0, 0, 3, 480));

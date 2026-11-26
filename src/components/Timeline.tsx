@@ -6,7 +6,7 @@ import { isCymbal, laneLabel } from '../model/drums';
 import { isStringed } from '../model/instruments';
 import { visibleLanes } from '../model/lanes';
 import { isBlackKey, pitchName } from '../model/music';
-import { clampShift, type NoteShift } from '../model/commands';
+import { clampShift, resizedDurations, resizeNotes, type NoteShift } from '../model/commands';
 import type { ID, Note, Song } from '../model/types';
 import { docStore, editor } from '../session';
 import type { PeerState } from '../sync/awareness';
@@ -41,6 +41,16 @@ interface Drag {
   dy: number;
 }
 
+/** Dragging a note's right edge: the notes being resized and where the grabbed note now ends. */
+interface Resize {
+  ids: ID[];
+  anchor: ID;
+  end: number;
+}
+
+/** Width of the grab zone at a note's right edge (narrower on short notes, so the body stays grabbable). */
+const EDGE_PX = 6;
+
 /** Guitar/bass: pixels of vertical drag per semitone, and how far to move before transposing at all. */
 const FRET_STEP_PX = 10;
 const FRET_DEAD_ZONE_PX = 6;
@@ -56,6 +66,7 @@ export function Timeline({ song, ed, peers }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [resize, setResize] = useState<Resize | null>(null);
 
   const notes = useMemo(
     () => Object.values(song.notes).filter((n) => n.trackId === ed.trackId),
@@ -125,7 +136,7 @@ export function Timeline({ song, ed, peers }: Props) {
    * Shared by rendering and box selection.
    */
   const chipRects = (n: Note, start = n.start, lane = n.string) => {
-    const out: { r: number; x: number; w: number; y: number; first: boolean }[] = [];
+    const out: { r: number; x: number; w: number; y: number; first: boolean; last: boolean }[] = [];
     const end = start + n.duration;
     for (let t = start; t < end;) {
       const r = rowOf(t);
@@ -135,7 +146,7 @@ export function Timeline({ song, ed, peers }: Props) {
       const x = gutter + (t - r * rowTicks) * ppt + (first ? 1 : 0);
       let w = (segEnd - t) * ppt - (first ? 1 : 0) - (last ? 1 : 0);
       if (first && last) w = Math.max(w, piano ? 6 : 14);
-      out.push({ r, x, w, y: laneY(r, lane) - chipH / 2, first });
+      out.push({ r, x, w, y: laneY(r, lane) - chipH / 2, first, last });
       t = segEnd;
     }
     return out;
@@ -149,6 +160,16 @@ export function Timeline({ song, ed, peers }: Props) {
     const onLane = local >= lanesTop && local < rowBody - PAD && inView(lane);
     return { r, tick, lane: onLane ? lane : null };
   };
+  /** How far the grabbed note's end has moved; every resized note changes by the same amount. */
+  const resizeDelta = (rs: Resize) => {
+    const n = song.notes[rs.anchor];
+    return n ? rs.end - (n.start + n.duration) : 0;
+  };
+  const resized = useMemo(
+    () => (resize ? resizedDurations(song, resize.ids, resizeDelta(resize), step) : new Map<ID, number>()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resize, song.notes, step],
+  );
   const [marquee, setMarquee] = useState<{ x0: number; x1: number; y0: number; y1: number } | null>(null);
 
   const selected = new Set(ed.selection);
@@ -286,6 +307,48 @@ export function Timeline({ song, ed, peers }: Props) {
     editor.set(selection.includes(id) ? { selection, cursor: n.start, cursorString: n.string } : { selection });
     if (selection.includes(id)) previewNote(id);
     if (selection.includes(id)) setDrag({ ids: selection, anchor: id, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 });
+  };
+
+  /**
+   * Grabbing a note's right edge sets its length: the end snaps to the grid. If the note is selected, every
+   * selected note grows or shrinks by the same amount.
+   */
+  const onEdgeDown = (e: React.MouseEvent, id: ID) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const st = editor.get();
+    const ids = st.selection.includes(id) ? st.selection : [id];
+    const n = song.notes[id];
+    editor.set({ selection: ids, cursor: n.start, cursorString: n.string });
+    const svg = svgRef.current!;
+    const endAt = (ev: { clientX: number; clientY: number }) => {
+      const rect = svg.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const y = ev.clientY - rect.top;
+      // Past the right edge of a row means the end of that row (the start of the next).
+      const r = Math.min(rows - 1, Math.max(0, Math.floor(y / stride)));
+      const tick = r * rowTicks + Math.min(rowTicks, Math.max(0, (x - gutter) / ppt));
+      return Math.round(tick / step) * step;
+    };
+    let current: Resize = { ids, anchor: id, end: n.start + n.duration };
+    setResize(current);
+    const onMove = (ev: MouseEvent) => {
+      const end = endAt(ev);
+      if (end !== current.end) setResize((current = { ...current, end }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      const s = docStore.getSong();
+      const anchor = s.notes[id];
+      if (anchor) {
+        const ops = resizeNotes(s, ids, current.end - (anchor.start + anchor.duration), step);
+        if (ops.length) docStore.transact(ops);
+      }
+      setResize(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
 
   const rowIndexes = Array.from({ length: rows }, (_, r) => r);
@@ -434,9 +497,17 @@ export function Timeline({ song, ed, peers }: Props) {
             const start = moving ? Math.max(0, n.start + shift.ticks) : n.start;
             const lane = moving ? n.string + shift.lanes : n.string;
             const fret = moving ? n.fret + shift.frets : n.fret;
-            const value = describeDuration(n.duration);
+            const sizing = resized.has(n.id);
+            const shown = sizing ? { ...n, duration: resized.get(n.id)! } : n;
+            const value = describeDuration(shown.duration);
             const color = piano ? 'piano' : `s${lane % 8}`;
-            const cls = ['tl-note', color, selected.has(n.id) ? 'selected' : '', moving ? 'dragging' : ''].join(' ');
+            const cls = [
+              'tl-note',
+              color,
+              selected.has(n.id) ? 'selected' : '',
+              moving ? 'dragging' : '',
+              sizing ? 'resizing' : '',
+            ].join(' ');
             const label = piano
               ? pitchName(track.tuning[lane])
               : isDrums
@@ -446,7 +517,7 @@ export function Timeline({ song, ed, peers }: Props) {
                 : fret;
             return (
               <g key={n.id} className={cls} onMouseDown={(e) => onNoteDown(e, n.id)}>
-                {chipRects(n, start, lane).map(({ r, x, w, y, first }) => (
+                {chipRects(shown, start, lane).map(({ r, x, w, y, first, last }) => (
                   <g key={r} className={first ? '' : 'continued'}>
                     <rect x={x} y={y} width={w} height={chipH} rx={piano ? 2 : 4} />
                     {first && (!piano || w >= 30) && (
@@ -464,7 +535,24 @@ export function Timeline({ song, ed, peers }: Props) {
                       </text>
                     )}
                     {first && value?.dotted && w > 14 && (
-                      <circle cx={x + w - (piano ? 4 : 6)} cy={y + chipH / 2} r={piano ? 1.5 : 2.5} className="tl-dot" />
+                      <circle
+                        cx={x + w - (piano ? 4 : 6)}
+                        cy={y + chipH / 2}
+                        r={piano ? 1.5 : 2.5}
+                        className="tl-dot"
+                      />
+                    )}
+                    {last && !moving && (
+                      <rect
+                        x={x + w - Math.min(EDGE_PX, w / 3)}
+                        y={y}
+                        width={Math.min(EDGE_PX, w / 3) + 2}
+                        height={chipH}
+                        className="tl-resize"
+                        onMouseDown={(e) => onEdgeDown(e, n.id)}
+                      >
+                        <title>Drag to change the length</title>
+                      </rect>
                     )}
                   </g>
                 ))}

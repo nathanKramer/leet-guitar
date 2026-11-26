@@ -238,6 +238,30 @@ export function setDurations(song: Song, ids: ID[], duration: number): Op[] {
   return ids.filter((id) => song.notes[id]).map((id) => patchNote(id, { duration }));
 }
 
+/**
+ * Lengths after stretching (or shrinking) notes by `delta` ticks. A note never gets shorter than `min` (or its own
+ * length, if that's already shorter) and never rings into the next note on its lane.
+ */
+export function resizedDurations(song: Song, ids: ID[], delta: number, min: number): Map<ID, number> {
+  const out = new Map<ID, number>();
+  const all = Object.values(song.notes);
+  for (const id of ids) {
+    const n = song.notes[id];
+    if (!n) continue;
+    const next = all
+      .filter((o) => o.trackId === n.trackId && o.string === n.string && o.start > n.start)
+      .reduce((m, o) => Math.min(m, o.start), Infinity);
+    out.set(id, Math.min(next - n.start, Math.max(Math.min(min, n.duration), n.duration + delta)));
+  }
+  return out;
+}
+
+export function resizeNotes(song: Song, ids: ID[], delta: number, min: number): Op[] {
+  return [...resizedDurations(song, ids, delta, min)]
+    .filter(([id, duration]) => song.notes[id].duration !== duration)
+    .map(([id, duration]) => patchNote(id, { duration }));
+}
+
 export function shiftFrets(song: Song, ids: ID[], delta: number): Op[] {
   const ops: Op[] = [];
   for (const id of ids) {

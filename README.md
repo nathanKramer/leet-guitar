@@ -21,7 +21,10 @@ npm run build
   empty space to box-select. Dragging selected notes sideways moves them in time; dragging up or down transposes them
   (piano: one row per semitone; guitar/bass: notes stay on their strings and the fret changes, about 10 px per
   semitone; drums: moves hits to another kit piece). The selection moves as a group and stops at the instrument's
-  range, so chords keep their shape. The grabbed note sounds at each new pitch.
+  range, so chords keep their shape. The grabbed note sounds at each new pitch. Drag a note's right edge to change
+  its length: the end snaps to the grid of the current note value (and can run onto the next row). If the note is
+  selected, every selected note grows or shrinks by the same amount. A note never runs into the next note on its
+  string, and never gets shorter than one grid step.
 - **Rows**: the song is laid out in rows of 4 bars, stacked like a page and scrolled vertically; click anywhere in
   any row to put the cursor there. `PgUp`/`PgDn` move the cursor a row, and the view follows the cursor (and the
   playhead during playback). The toolbar's −/+ sets bars per row (1, 2, 4 or 8); with short note values on a

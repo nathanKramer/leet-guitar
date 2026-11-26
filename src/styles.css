@@ -392,6 +392,18 @@ main > * {
 .tl-pm line.tl-pm-end {
   stroke-dasharray: none;
 }
+.tl-note rect.tl-resize {
+  fill: var(--text);
+  fill-opacity: 0;
+  stroke: none;
+  cursor: ew-resize;
+}
+
+.tl-note:hover rect.tl-resize,
+.tl-note.resizing rect.tl-resize {
+  fill-opacity: 0.35;
+}
+
 .tl-note .tl-dot {
   fill: var(--text);
   pointer-events: none;
