@@ -1,7 +1,18 @@
 import { useSyncExternalStore } from 'react';
 import type { BaseDuration } from '../model/durations';
 import type { ChannelMode } from '../midi/export';
+import type { Block } from '../model/arrange';
 import type { ID } from '../model/types';
+
+/**
+ * The arrangement view's selection. `anchor` is where a Shift+arrow or drag selection grows from; `focus` is the
+ * block the arrow keys move from.
+ */
+export interface ArrangeSelection {
+  blocks: Block[];
+  anchor: Block | null;
+  focus: Block | null;
+}
 
 /** Row lengths the timeline can be set to (zoom in = fewer bars per row). */
 export const BARS_PER_ROW = [1, 2, 4, 8];
@@ -10,8 +21,8 @@ export const BARS_PER_ROW = [1, 2, 4, 8];
 export interface EditorState {
   /** Which view fills the main area: the note editor, or the bar-by-bar arrangement of all tracks. */
   view: 'edit' | 'arrange';
-  /** Selected bars in the arrangement view (numbered from 0): the bar clicked first and the one extended to. */
-  barSel: { anchor: number; focus: number } | null;
+  /** Selected blocks (one track's bar) in the arrangement view. */
+  arrSel: ArrangeSelection;
   trackId: ID;
   cursor: number;
   cursorString: number;

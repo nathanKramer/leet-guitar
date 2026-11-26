@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { deleteBars, duplicateBars, insertBars, moveBars, movedTo, usedBars } from './arrange';
+import {
+  clearBlocks,
+  copyBlocks,
+  deleteBars,
+  duplicateBars,
+  duplicateBlocks,
+  insertBars,
+  moveBars,
+  moveBlocks,
+  movedTo,
+  pasteBlocks,
+  usedBars,
+} from './arrange';
 import { addNote, addTrack, initDocument, sortedTracks } from './commands';
 import { DocumentStore } from './store';
 import type { Song } from './types';
@@ -110,5 +122,82 @@ describe('arranging bars', () => {
     expect(moved.duration).toBe(2 * BAR); // the next note on string 1 is now in bar 2
     s.transact(moveBars(s.getSong(), { first: 2, count: 1 }, 1));
     expect(s.getSong().notes[long.id].duration).toBe(BAR);
+  });
+});
+
+describe('arranging blocks (one track, one bar)', () => {
+  it('moves a block within its track, replacing the destination and leaving the source empty', () => {
+    const { s, guitar, drums } = setup();
+    const tracks = sortedTracks(s.getSong());
+    const r = moveBlocks(s.getSong(), tracks, [{ trackId: guitar, bar: 0 }], 0, 2);
+    s.transact(r.ops);
+    expect(layout(s.getSong(), guitar).map((n) => [n[0], n[2]])).toEqual([
+      [1, 1],
+      [2, 0],
+      [3, 3],
+    ]);
+    // Other tracks are untouched.
+    expect(layout(s.getSong(), drums).map((n) => n[0])).toEqual([0, 2]);
+    expect(r.blocks).toEqual([{ trackId: guitar, bar: 2 }]);
+  });
+
+  it('copies blocks with their shape and pastes them over other blocks', () => {
+    const { s, guitar, drums } = setup();
+    const tracks = sortedTracks(s.getSong());
+    const clip = copyBlocks(
+      s.getSong(),
+      [
+        { trackId: guitar, bar: 0 },
+        { trackId: drums, bar: 1 }, // empty: pasting it empties the target
+      ],
+      tracks,
+    )!;
+    expect([clip.rows, clip.bars]).toEqual([2, 2]);
+    s.transact(pasteBlocks(s.getSong(), tracks, clip, 0, 2).ops);
+    expect(layout(s.getSong(), guitar).map((n) => [n[0], n[2]])).toEqual([
+      [0, 0],
+      [1, 1],
+      [2, 0],
+      [3, 3],
+    ]);
+    expect(layout(s.getSong(), drums).map((n) => n[0])).toEqual([0, 2]);
+    s.transact(pasteBlocks(s.getSong(), tracks, clip, 0, 1).ops);
+    expect(layout(s.getSong(), drums).map((n) => n[0])).toEqual([0]); // bar 2's kick replaced by the empty block
+  });
+
+  it('refuses to put drum hits on a pitched track', () => {
+    const { s, drums } = setup();
+    const tracks = sortedTracks(s.getSong());
+    const r = moveBlocks(s.getSong(), tracks, [{ trackId: drums, bar: 0 }], -1, 0);
+    expect(r.refused).toBe(1);
+    expect(r.blocks).toEqual([]);
+  });
+
+  it('carries a guitar block to a bass track by pitch', () => {
+    const { s, guitar } = setup();
+    const bass = addTrack(s.getSong(), 'bass');
+    s.transact(bass.ops);
+    const tracks = sortedTracks(s.getSong());
+    const row = tracks.findIndex((t) => t.id === bass.id) - tracks.findIndex((t) => t.id === guitar);
+    s.transact(moveBlocks(s.getSong(), tracks, [{ trackId: guitar, bar: 3 }], row, 0, true).ops);
+    const notes = Object.values(s.getSong().notes).filter((n) => n.trackId === bass.id);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].start).toBe(3 * BAR);
+  });
+
+  it('duplicates and clears blocks', () => {
+    const { s, guitar } = setup();
+    const tracks = sortedTracks(s.getSong());
+    const blocks = [
+      { trackId: guitar, bar: 0 },
+      { trackId: guitar, bar: 1 },
+    ];
+    s.transact(duplicateBlocks(s.getSong(), tracks, blocks).ops);
+    expect(layout(s.getSong(), guitar).map((n) => n[2])).toEqual([0, 1, 0, 1]);
+    s.transact(clearBlocks(s.getSong(), blocks));
+    expect(layout(s.getSong(), guitar).map((n) => [n[0], n[2]])).toEqual([
+      [2, 0],
+      [3, 1],
+    ]);
   });
 });

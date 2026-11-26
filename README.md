@@ -28,14 +28,25 @@ npm run build
   narrow window, fewer bars per row make the grid easier to click. Notes that run past the end of a row
   continue at the start of the next (drawn dashed).
 - **Arrangement**: the **Arrange** tab (above the editor) shows the whole song bar by bar: one row per track, one
-  column per bar, each cell a sketch of its notes. Arranging works on whole bars across every track at once. Click a
-  bar to select it (`Shift`-click or `Shift+←/→` for several), then drag the selection to where it should go, or press
-  `Alt+←/→` (or **◀ Move** / **Move ▶**) to move it a bar at a time. **Duplicate** (`Ctrl+D`) repeats the selection
-  straight after itself, **Insert bar** (`I`) adds an empty bar before it, and **Delete** (`Del`) removes it from every
-  track, closing the gap. A note belongs to the bar it starts in and keeps its length, so a note ringing over a bar
-  line rings into whatever bar now follows; it's cut short if that would run into the next note on its string. Each
-  change is one undo step. Double-click a cell (or press `Enter`) to edit that track at that bar; `Space` plays from
-  the selected bar.
+  column per bar. Each **block** (one track's bar) shows a sketch of its notes, and blocks are what you select, copy
+  and move.
+  - **Selecting**: click a block; click and drag to select a rectangle of blocks; `Shift`-click adds or removes a
+    block (`Shift`-drag adds a rectangle). You can also drag a box from the empty space below the tracks;
+    every block it touches is selected, and a click there deselects. Arrow keys move the selection, `Shift+arrows` grow it, `Ctrl+A` selects
+    the whole song, and clicking a track's name selects its whole part. Click or drag across the bar numbers to
+    select whole bars (every track).
+  - **Moving and copying blocks**: drag a selection to move it to other bars or another track (hold `Alt` to copy
+    instead), or use `Alt+arrows`. `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste (pasting at the selected
+    block, top-left first), `Ctrl+D` repeats the selection straight after itself, and `Del` empties blocks. Blocks
+    replace whatever is where they land. Blocks can go to a different kind of track: notes are re-placed by pitch, as
+    with pasting notes, but drum blocks only go on drum tracks and pitched blocks only on pitched tracks.
+  - **Reordering the song**: with whole bars selected, dragging them (or `Alt+←/→`) moves the bars across every
+    track, and the bars in between close up; `Ctrl+D` repeats them, pushing later bars along. **Insert bar** (`I`)
+    adds an empty bar in every track before the selection, and **Remove bars** (`Shift+Del`) removes the bars the
+    selection spans from every track, closing the gap.
+  - A note belongs to the bar it starts in and keeps its length, so a note ringing over a bar line rings into
+    whatever bar now follows; it's cut short if that would run into the next note on its string. Each change is one
+    undo step. Double-click a block (or press `Enter`) to edit it in the editor; `Space` plays from the selection.
 - **Count-in**: playback starts with one bar of metronome clicks in the song's time signature and tempo (seven
   eighth-note clicks in 7/8), the first one higher. The Play button counts the beats. **Count-in** in the toolbar
   turns it off or on; the setting is remembered in this browser.
@@ -136,7 +147,7 @@ src/model/      Pure document model — no DOM, no React
   transfer.ts     Pasting across instruments: pitch → lane/fret, guitar/bass fingering search
   tunings.ts      Tuning presets (6/7-string guitar, 4/5-string bass) and names
   project.ts      Project file format: song ↔ JSON, validation, ops that replace a document's contents
-  arrange.ts      Whole-bar edits across all tracks: move, duplicate, insert, delete bars
+  arrange.ts      Arrangement edits: whole bars across all tracks, and blocks (one track's bar)
 src/sync/       Transport and persistence
   provider.ts     SyncProvider interface + message types
   broadcastChannel.ts  Cross-tab provider (ops, snapshot handshake, presence)

@@ -106,7 +106,7 @@ export default function App() {
                 {ed.notice}
               </span>
             )}
-            <span>
+            <span hidden={ed.view === 'arrange'}>
               {sel.length ? (
                 <>
                   {sel.length} selected
@@ -118,9 +118,10 @@ export default function App() {
             </span>
             {ed.view === 'arrange' ? (
               <span className="keys">
-                <kbd>←→</kbd> select bar · <kbd>Shift ←→</kbd> extend · <kbd>Alt ←→</kbd> move bars · drag to move ·{' '}
-                <kbd>Ctrl D</kbd> duplicate · <kbd>I</kbd> insert · <kbd>Del</kbd> delete · <kbd>Enter</kbd> or
-                double-click to edit · <kbd>Space</kbd> play
+                <kbd>←→↑↓</kbd> select · <kbd>Shift</kbd> extend / add · <kbd>Alt ←→↑↓</kbd> move ·{' '}
+                <kbd>Ctrl C X V</kbd> copy, cut, paste · <kbd>Ctrl D</kbd> duplicate · <kbd>Del</kbd> clear ·{' '}
+                <kbd>I</kbd> insert bar · <kbd>Shift Del</kbd> remove bars · <kbd>Enter</kbd> edit · <kbd>Space</kbd>{' '}
+                play
               </span>
             ) : song.tracks[ed.trackId]?.kind === 'piano' ? (
               <span className="keys">

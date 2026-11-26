@@ -137,27 +137,30 @@ export function handleKeyDown(e: KeyboardEvent) {
   if (handled) e.preventDefault();
 }
 
-/** Keys in the arrangement view, which works on whole bars. Note-editing keys do nothing there. */
+/** Keys in the arrangement view, which works on blocks (a track's bar). Note-editing keys do nothing there. */
 function handleArrangeKey(e: KeyboardEvent, mod: boolean): boolean {
   const key = e.key.toLowerCase();
   if (mod) {
     if (key === 'z') (e.shiftKey ? act.redo : act.undo)();
     else if (key === 'y') act.redo();
-    else if (key === 'd') arr.duplicateSelectedBars();
+    else if (key === 'c') arr.copy();
+    else if (key === 'x') arr.cut();
+    else if (key === 'v') arr.paste();
+    else if (key === 'd') arr.duplicate();
+    else if (key === 'a') arr.selectAll();
     else return false;
     return true;
   }
-  const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-  if (dir) {
-    if (e.altKey) arr.nudgeSelectedBars(dir);
-    else arr.stepBarSelection(dir, e.shiftKey);
+  const dBars = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+  const dRows = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+  if (dBars || dRows) {
+    if (e.altKey) dBars ? arr.nudge(dBars as 1 | -1) : arr.moveBlocksBy(dRows, 0);
+    else arr.stepSelection(dBars, dRows, e.shiftKey);
   } else if (e.key === ' ') act.togglePlay();
-  else if (e.key === 'Delete' || e.key === 'Backspace') arr.deleteSelectedBars();
+  else if (e.key === 'Delete' || e.key === 'Backspace') (e.shiftKey ? arr.removeBars : arr.clear)();
   else if (e.key === 'Insert' || key === 'i') arr.insertBar();
-  else if (e.key === 'Enter') {
-    const range = arr.selectedBars();
-    arr.openInEditor(editor.get().trackId, range?.first ?? 0);
-  } else if (e.key === 'Home') arr.selectBar(0);
+  else if (e.key === 'Enter') arr.openInEditor();
+  else if (e.key === 'Escape') arr.clearSelection();
   else return false;
   return true;
 }

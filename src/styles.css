@@ -865,8 +865,8 @@ kbd {
   min-width: 84px;
 }
 .arrangement {
-  flex: 0 1 auto;
-  min-height: 160px;
+  flex: 1 1 auto;
+  min-height: 220px;
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -898,6 +898,7 @@ button.danger:hover:not(:disabled) {
   color: #f0a59e;
 }
 .ar-body {
+  flex: 1;
   display: flex;
   min-height: 0;
   overflow-y: auto;
@@ -955,12 +956,41 @@ button.danger:hover:not(:disabled) {
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
-.ar-sel {
+.ar-col-sel {
   fill: var(--accent);
-  opacity: 0.14;
+  opacity: 0.35;
 }
-.ar-sel.lifted {
-  opacity: 0.26;
+.ar-block-sel {
+  fill: var(--accent);
+  opacity: 0.16;
+}
+.ar-block-sel.lifted {
+  opacity: 0.08;
+}
+.ar-clip.selected {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+.ar-focus {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.ar-marquee {
+  fill: var(--accent);
+  fill-opacity: 0.08;
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.ar-ghost {
+  fill: var(--accent);
+  fill-opacity: 0.12;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
 }
 .ar-clip {
   fill: #2a3a4f;
