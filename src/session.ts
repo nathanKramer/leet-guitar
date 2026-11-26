@@ -43,6 +43,8 @@ export function saveCountIn(on: boolean) {
 }
 
 export const editor = createStore<EditorState>({
+  view: 'edit',
+  barSel: null,
   trackId: DEFAULT_TRACK_ID,
   cursor: 0,
   cursorString: 0,

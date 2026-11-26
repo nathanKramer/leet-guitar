@@ -1,5 +1,6 @@
 import { docStore, editor } from '../session';
 import * as act from './actions';
+import * as arr from './arrange';
 import { openProject, saveProject } from './project';
 import { stepDuration, type BaseDuration } from '../model/durations';
 
@@ -43,7 +44,9 @@ function enterDigit(d: number) {
 
 function isTyping(target: EventTarget | null) {
   const el = target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  return (
+    !!el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+  );
 }
 
 export function handleKeyDown(e: KeyboardEvent) {
@@ -56,6 +59,10 @@ export function handleKeyDown(e: KeyboardEvent) {
     return;
   }
   if (isTyping(e.target)) return;
+  if (editor.get().view === 'arrange') {
+    if (handleArrangeKey(e, mod)) e.preventDefault();
+    return;
+  }
   const key = e.key.toLowerCase();
   const hasSel = act.liveSelection().length > 0;
   let handled = true;
@@ -128,4 +135,29 @@ export function handleKeyDown(e: KeyboardEvent) {
     }
   }
   if (handled) e.preventDefault();
+}
+
+/** Keys in the arrangement view, which works on whole bars. Note-editing keys do nothing there. */
+function handleArrangeKey(e: KeyboardEvent, mod: boolean): boolean {
+  const key = e.key.toLowerCase();
+  if (mod) {
+    if (key === 'z') (e.shiftKey ? act.redo : act.undo)();
+    else if (key === 'y') act.redo();
+    else if (key === 'd') arr.duplicateSelectedBars();
+    else return false;
+    return true;
+  }
+  const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+  if (dir) {
+    if (e.altKey) arr.nudgeSelectedBars(dir);
+    else arr.stepBarSelection(dir, e.shiftKey);
+  } else if (e.key === ' ') act.togglePlay();
+  else if (e.key === 'Delete' || e.key === 'Backspace') arr.deleteSelectedBars();
+  else if (e.key === 'Insert' || key === 'i') arr.insertBar();
+  else if (e.key === 'Enter') {
+    const range = arr.selectedBars();
+    arr.openInEditor(editor.get().trackId, range?.first ?? 0);
+  } else if (e.key === 'Home') arr.selectBar(0);
+  else return false;
+  return true;
 }

@@ -27,6 +27,15 @@ npm run build
   playhead during playback). The toolbar's −/+ sets bars per row (1, 2, 4 or 8); with short note values on a
   narrow window, fewer bars per row make the grid easier to click. Notes that run past the end of a row
   continue at the start of the next (drawn dashed).
+- **Arrangement**: the **Arrange** tab (above the editor) shows the whole song bar by bar: one row per track, one
+  column per bar, each cell a sketch of its notes. Arranging works on whole bars across every track at once. Click a
+  bar to select it (`Shift`-click or `Shift+←/→` for several), then drag the selection to where it should go, or press
+  `Alt+←/→` (or **◀ Move** / **Move ▶**) to move it a bar at a time. **Duplicate** (`Ctrl+D`) repeats the selection
+  straight after itself, **Insert bar** (`I`) adds an empty bar before it, and **Delete** (`Del`) removes it from every
+  track, closing the gap. A note belongs to the bar it starts in and keeps its length, so a note ringing over a bar
+  line rings into whatever bar now follows; it's cut short if that would run into the next note on its string. Each
+  change is one undo step. Double-click a cell (or press `Enter`) to edit that track at that bar; `Space` plays from
+  the selected bar.
 - **Count-in**: playback starts with one bar of metronome clicks in the song's time signature and tempo (seven
   eighth-note clicks in 7/8), the first one higher. The Play button counts the beats. **Count-in** in the toolbar
   turns it off or on; the setting is remembered in this browser.
@@ -127,6 +136,7 @@ src/model/      Pure document model — no DOM, no React
   transfer.ts     Pasting across instruments: pitch → lane/fret, guitar/bass fingering search
   tunings.ts      Tuning presets (6/7-string guitar, 4/5-string bass) and names
   project.ts      Project file format: song ↔ JSON, validation, ops that replace a document's contents
+  arrange.ts      Whole-bar edits across all tracks: move, duplicate, insert, delete bars
 src/sync/       Transport and persistence
   provider.ts     SyncProvider interface + message types
   broadcastChannel.ts  Cross-tab provider (ops, snapshot handshake, presence)
@@ -139,7 +149,7 @@ src/audio/      Playback
   soundfont.ts    SoundFont engine (spessasynth_lib), lazy-loaded on first use
   metronome.ts    Count-in clicks, synthesized directly so they sound the same with either engine
 src/midi/       Standard MIDI File writer; channels.ts maps tracks to MIDI channels for export and playback
-src/components/ Toolbar, TrackList, Fretboard, PianoKeys, DrumPads, Timeline
+src/components/ Toolbar, TrackList, Fretboard, PianoKeys, DrumPads, Timeline, Arrangement
 ```
 
 ### Collaboration

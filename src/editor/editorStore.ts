@@ -8,6 +8,10 @@ export const BARS_PER_ROW = [1, 2, 4, 8];
 
 /** Local, per-user UI state. Never synced or persisted with the document. */
 export interface EditorState {
+  /** Which view fills the main area: the note editor, or the bar-by-bar arrangement of all tracks. */
+  view: 'edit' | 'arrange';
+  /** Selected bars in the arrangement view (numbered from 0): the bar clicked first and the one extended to. */
+  barSel: { anchor: number; focus: number } | null;
   trackId: ID;
   cursor: number;
   cursorString: number;

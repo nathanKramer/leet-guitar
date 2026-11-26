@@ -855,3 +855,159 @@ kbd {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* View tabs and arrangement */
+.view-tabs {
+  display: flex;
+  gap: 4px;
+}
+.view-tabs .seg {
+  min-width: 84px;
+}
+.arrangement {
+  flex: 0 1 auto;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ar-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.ar-status {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+button.danger:hover:not(:disabled) {
+  border-color: #b5524a;
+  color: #f0a59e;
+}
+.ar-body {
+  display: flex;
+  min-height: 0;
+  overflow-y: auto;
+}
+.ar-names {
+  flex: 0 0 120px;
+  background: var(--panel-2);
+  border-right: 1px solid var(--border);
+}
+.ar-name {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.ar-name.active {
+  color: var(--accent);
+}
+.ar-name.silent-track {
+  opacity: 0.45;
+}
+.ar-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.ar-scroll svg {
+  display: block;
+  user-select: none;
+  touch-action: pan-y;
+}
+.ar-scroll svg.dragging {
+  cursor: grabbing;
+}
+.ar-head {
+  fill: var(--panel-2);
+}
+.ar-row {
+  fill: var(--panel);
+}
+.ar-row.odd {
+  fill: #1d2025;
+}
+.ar-barline {
+  stroke: var(--border);
+}
+.ar-barnum {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.ar-sel {
+  fill: var(--accent);
+  opacity: 0.14;
+}
+.ar-sel.lifted {
+  opacity: 0.26;
+}
+.ar-clip {
+  fill: #2a3a4f;
+  stroke: #3b5272;
+}
+.ar-note {
+  fill: #9cc3f5;
+}
+.ar-track.bass .ar-clip {
+  fill: #33304d;
+  stroke: #4b4672;
+}
+.ar-track.bass .ar-note {
+  fill: #b9aef5;
+}
+.ar-track.piano .ar-clip {
+  fill: #23403a;
+  stroke: #33604f;
+}
+.ar-track.piano .ar-note {
+  fill: #8fe0c4;
+}
+.ar-track.drums .ar-clip {
+  fill: #47342a;
+  stroke: #6c4c3a;
+}
+.ar-track.drums .ar-note {
+  fill: #f5bf98;
+}
+.ar-track.silent {
+  opacity: 0.4;
+}
+.ar-cursor {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+.ar-drop line {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.ar-drop path {
+  fill: var(--accent);
+}
+.ar-drop.invalid line,
+.ar-drop.invalid path {
+  stroke: var(--muted);
+  fill: var(--muted);
+  opacity: 0.6;
+}
