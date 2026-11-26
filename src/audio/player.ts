@@ -4,6 +4,7 @@ import { notePitch } from '../model/drums';
 import type { ID, Note, Song } from '../model/types';
 import { audio } from './context';
 import type { SoundEngine } from './engine';
+import { countInClicks, scheduleClicks } from './metronome';
 
 /** How far ahead notes are handed to the engine, and how often the scheduler runs. */
 export const LOOKAHEAD_S = 0.2;
@@ -29,6 +30,7 @@ export class Player {
   private timer: ReturnType<typeof setInterval> | undefined;
   private onEnd: (() => void) | undefined;
   private active = false;
+  private cancelClicks: (() => void) | undefined;
 
   constructor(engine: SoundEngine) {
     this.engine = engine;
@@ -52,6 +54,8 @@ export class Player {
     isSilenced: (trackId: ID) => boolean,
     onTick: (tick: number) => void,
     onEnd: () => void,
+    /** Play a bar of metronome clicks first; `onCount` hears each beat of it (1, 2, …), then null. */
+    countIn?: { onCount: (beat: number | null) => void },
   ) {
     this.stop();
     this.active = true;
@@ -63,7 +67,10 @@ export class Player {
     const { ctx } = audio();
     const bpm = song.meta.bpm;
     const secondsPerTick = ticksToSeconds(1, bpm);
-    const t0 = ctx.currentTime + 0.08;
+    const start = ctx.currentTime + 0.08;
+    const count = countIn ? countInClicks(song.meta) : null;
+    if (count) this.cancelClicks = scheduleClicks(count.clicks, start);
+    const t0 = start + (count?.seconds ?? 0);
     const notes = Object.values(song.notes)
       .filter((n) => n.start >= fromTick && song.tracks[n.trackId])
       .sort((a, b) => a.start - b.start);
@@ -91,9 +98,15 @@ export class Player {
     schedule();
     this.timer = setInterval(schedule, TICK_MS);
 
+    let beat: number | null = null;
     const frame = () => {
-      const tick = Math.max(fromTick, tickAt(ctx.currentTime));
-      if (tick >= endTick) {
+      const now = ctx.currentTime;
+      if (count) {
+        const b = now < t0 ? Math.max(1, Math.floor((now - start) / count.beatSeconds) + 1) : null;
+        if (b !== beat) countIn!.onCount((beat = b));
+      }
+      const tick = Math.max(fromTick, tickAt(now));
+      if (now >= t0 && tick >= endTick) {
         this.finish();
         return;
       }
@@ -119,6 +132,8 @@ export class Player {
 
   private halt() {
     this.active = false;
+    this.cancelClicks?.();
+    this.cancelClicks = undefined;
     cancelAnimationFrame(this.raf);
     clearInterval(this.timer);
     this.timer = undefined;

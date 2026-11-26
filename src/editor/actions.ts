@@ -6,7 +6,7 @@ import { trackKindFor, type Instrument } from '../model/gm';
 import type { Clip } from '../model/transfer';
 import type { ID, TrackKind } from '../model/types';
 import { BARS_PER_ROW, type EditorState } from './editorStore';
-import { docStore, editor, player } from '../session';
+import { docStore, editor, player, saveCountIn } from '../session';
 
 let clipboard: Clip | null = null;
 
@@ -54,7 +54,8 @@ export function placeNote(string: number, fret: number, opts: { advance: boolean
   const notes = song().notes;
   const stacked = selectedBefore.filter((sid) => notes[sid]);
   const stacking =
-    (!opts.advance || s.chordMode) && stacked.every((sid) => notes[sid].trackId === s.trackId && notes[sid].start === s.cursor);
+    (!opts.advance || s.chordMode) &&
+    stacked.every((sid) => notes[sid].trackId === s.trackId && notes[sid].start === s.cursor);
   editor.set({
     selection: stacking ? [...stacked, id] : [id],
     cursorString: string,
@@ -211,7 +212,8 @@ export function paste() {
   editor.set({ selection: ids, cursor: s.cursor + end });
   const changes = [
     placement.octaveShifted && `${plural(placement.octaveShifted, 'note')} moved by an octave to fit ${target.name}`,
-    placement.dropped && `${plural(placement.dropped, 'note')} left out (no room for ${placement.dropped === 1 ? 'it' : 'them'})`,
+    placement.dropped &&
+      `${plural(placement.dropped, 'note')} left out (no room for ${placement.dropped === 1 ? 'it' : 'them'})`,
   ].filter(Boolean);
   if (changes.length) notify(`Pasted ${plural(ids.length, 'note')}: ${changes.join('; ')}.`);
 }
@@ -228,13 +230,20 @@ export function togglePlay() {
     // Read at scheduling time, so muting or soloing during playback takes effect straight away.
     (trackId) => !isAudible(trackId),
     (tick) => editor.set({ playhead: tick }),
-    () => editor.set({ playing: false, playhead: null }),
+    () => editor.set({ playing: false, playhead: null, countBeat: null }),
+    ed().countIn ? { onCount: (countBeat) => editor.set({ countBeat }) } : undefined,
   );
 }
 
 export function stop() {
   player.stop();
-  editor.set({ playing: false, playhead: null });
+  editor.set({ playing: false, playhead: null, countBeat: null });
+}
+
+export function toggleCountIn() {
+  const countIn = !ed().countIn;
+  editor.set({ countIn });
+  saveCountIn(countIn);
 }
 
 export function undo() {
@@ -295,7 +304,10 @@ export function toggleMute(trackId: ID) {
 /** Solo a track. Several can be soloed at once; with `exclusive`, this one becomes the only solo. */
 export function toggleSolo(trackId: ID, exclusive = false) {
   editor.set((s) => ({
-    soloTracks: exclusive && !(s.soloTracks.length === 1 && s.soloTracks[0] === trackId) ? [trackId] : toggled(s.soloTracks, trackId),
+    soloTracks:
+      exclusive && !(s.soloTracks.length === 1 && s.soloTracks[0] === trackId)
+        ? [trackId]
+        : toggled(s.soloTracks, trackId),
   }));
 }
 

@@ -20,9 +20,13 @@ export interface EditorState {
   playhead: number | null;
   /** How many bars each timeline row holds; rows stack vertically and stretch to the timeline's width. */
   barsPerRow: number;
-  /** Measured width (px) of the timeline, used to keep grid steps wide enough to click. */
+  /** Measured width (px) of the timeline. */
   rowWidth: number;
   midiMode: ChannelMode;
+  /** Play a bar of metronome clicks before playback starts. */
+  countIn: boolean;
+  /** The count-in beat being clicked right now (1, 2, …), or null when not counting in. */
+  countBeat: number | null;
   /** Tracks silenced during playback (a local listening choice, not part of the song). */
   mutedTracks: ID[];
   /** Soloed tracks: while any are soloed, only they play (still a local listening choice). */

@@ -23,6 +23,25 @@ export const docStore = new DocumentStore({ actor, state: loadSnapshot(docId) })
 docStore.transact(initDocument(docStore.getSong()), { undoable: false });
 attachPersistence(docStore, docId);
 
+const COUNT_IN_KEY = 'leet-guitar:count-in';
+
+/** The count-in setting is remembered in this browser (on unless turned off). */
+function loadCountIn() {
+  try {
+    return localStorage.getItem(COUNT_IN_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+export function saveCountIn(on: boolean) {
+  try {
+    localStorage.setItem(COUNT_IN_KEY, on ? 'on' : 'off');
+  } catch {
+    // Not remembered (private window or blocked storage); the setting still applies to this tab.
+  }
+}
+
 export const editor = createStore<EditorState>({
   trackId: DEFAULT_TRACK_ID,
   cursor: 0,
@@ -36,6 +55,8 @@ export const editor = createStore<EditorState>({
   barsPerRow: 4,
   rowWidth: 1000,
   midiMode: 'per-track',
+  countIn: loadCountIn(),
+  countBeat: null,
   mutedTracks: [],
   soloTracks: [],
   notice: null,

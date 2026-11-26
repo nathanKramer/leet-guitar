@@ -27,6 +27,9 @@ npm run build
   playhead during playback). The toolbar's −/+ sets bars per row (1, 2, 4 or 8); with short note values on a
   narrow window, fewer bars per row make the grid easier to click. Notes that run past the end of a row
   continue at the start of the next (drawn dashed).
+- **Count-in**: playback starts with one bar of metronome clicks in the song's time signature and tempo (seven
+  eighth-note clicks in 7/8), the first one higher. The Play button counts the beats. **Count-in** in the toolbar
+  turns it off or on; the setting is remembered in this browser.
 - **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet. Changing the value resizes any selected notes, including
   the one you just entered; if they end at the cursor, the cursor moves with them. Press `Esc` first to change the
   value for the next note only.
@@ -134,6 +137,7 @@ src/audio/      Playback
   player.ts       Timing: schedules notes a short window ahead into the current engine
   builtin.ts      Default engine: Karplus–Strong plucked string, additive piano (piano.ts), synthesized drums
   soundfont.ts    SoundFont engine (spessasynth_lib), lazy-loaded on first use
+  metronome.ts    Count-in clicks, synthesized directly so they sound the same with either engine
 src/midi/       Standard MIDI File writer; channels.ts maps tracks to MIDI channels for export and playback
 src/components/ Toolbar, TrackList, Fretboard, PianoKeys, DrumPads, Timeline
 ```

@@ -78,7 +78,15 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
 
       <div className="group">
         <button className="primary" onClick={act.togglePlay} title="Play / stop (Space)">
-          {ed.playing ? '■ Stop' : '▶ Play'}
+          {ed.countBeat ? `■ ${ed.countBeat}…` : ed.playing ? '■ Stop' : '▶ Play'}
+        </button>
+        <button
+          className={ed.countIn ? 'seg active' : 'seg'}
+          onClick={act.toggleCountIn}
+          aria-pressed={ed.countIn}
+          title="Count-in: click one bar of the time signature before playback starts"
+        >
+          Count-in
         </button>
         <label className="field">
           BPM
