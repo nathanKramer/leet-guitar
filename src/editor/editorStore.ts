@@ -28,6 +28,8 @@ export interface EditorState {
   cursorString: number;
   base: BaseDuration;
   triplet: boolean;
+  /** Dotted: one and a half times the base value. Never on together with `triplet`. */
+  dotted: boolean;
   /** When on, entering a note doesn't advance the cursor (build chords). */
   chordMode: boolean;
   selection: ID[];

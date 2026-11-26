@@ -127,7 +127,7 @@ export function Timeline({ song, ed, peers }: Props) {
   const chipRects = (n: Note, start = n.start, lane = n.string) => {
     const out: { r: number; x: number; w: number; y: number; first: boolean }[] = [];
     const end = start + n.duration;
-    for (let t = start; t < end; ) {
+    for (let t = start; t < end;) {
       const r = rowOf(t);
       const segEnd = Math.min(end, (r + 1) * rowTicks);
       const first = t === start;
@@ -333,7 +333,13 @@ export function Timeline({ song, ed, peers }: Props) {
                   <rect x={0} y={laneY(r, s) - rowH / 2} width={right} height={rowH} className="tl-blackkey" />
                 )}
                 {track.tuning[s] % 12 === 0 && (
-                  <line x1={0} x2={right} y1={laneY(r, s) + rowH / 2} y2={laneY(r, s) + rowH / 2} className="tl-octave" />
+                  <line
+                    x1={0}
+                    x2={right}
+                    y1={laneY(r, s) + rowH / 2}
+                    y2={laneY(r, s) + rowH / 2}
+                    className="tl-octave"
+                  />
                 )}
               </g>
             ))
@@ -382,7 +388,7 @@ export function Timeline({ song, ed, peers }: Props) {
     }
     return runs.flatMap((run) => {
       const out: { key: string; r: number; x0: number; x1: number; first: boolean; last: boolean }[] = [];
-      for (let t = run.start; t < run.end; ) {
+      for (let t = run.start; t < run.end;) {
         const r = rowOf(t);
         const segEnd = Math.min(run.end, (r + 1) * rowTicks);
         out.push({
@@ -428,10 +434,16 @@ export function Timeline({ song, ed, peers }: Props) {
             const start = moving ? Math.max(0, n.start + shift.ticks) : n.start;
             const lane = moving ? n.string + shift.lanes : n.string;
             const fret = moving ? n.fret + shift.frets : n.fret;
-            const triplet = describeDuration(n.duration)?.triplet;
+            const value = describeDuration(n.duration);
             const color = piano ? 'piano' : `s${lane % 8}`;
             const cls = ['tl-note', color, selected.has(n.id) ? 'selected' : '', moving ? 'dragging' : ''].join(' ');
-            const label = piano ? pitchName(track.tuning[lane]) : isDrums ? (isCymbal(track.tuning[lane]) ? '×' : '●') : fret;
+            const label = piano
+              ? pitchName(track.tuning[lane])
+              : isDrums
+                ? isCymbal(track.tuning[lane])
+                  ? '×'
+                  : '●'
+                : fret;
             return (
               <g key={n.id} className={cls} onMouseDown={(e) => onNoteDown(e, n.id)}>
                 {chipRects(n, start, lane).map(({ r, x, w, y, first }) => (
@@ -446,10 +458,13 @@ export function Timeline({ song, ed, peers }: Props) {
                         {label}
                       </text>
                     )}
-                    {first && triplet && w > 22 && !piano && (
+                    {first && value?.triplet && w > 22 && !piano && (
                       <text x={x + w - 4} y={y + 8} className="tl-tuplet">
                         3
                       </text>
+                    )}
+                    {first && value?.dotted && w > 14 && (
+                      <circle cx={x + w - (piano ? 4 : 6)} cy={y + chipH / 2} r={piano ? 1.5 : 2.5} className="tl-dot" />
                     )}
                   </g>
                 ))}

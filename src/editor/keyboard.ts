@@ -126,6 +126,9 @@ export function handleKeyDown(e: KeyboardEvent) {
       case 'T':
         act.toggleTriplet();
         break;
+      case '.':
+        act.toggleDotted();
+        break;
       case 'c':
       case 'C':
         editor.set((s) => ({ chordMode: !s.chordMode }));

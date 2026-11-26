@@ -29,6 +29,9 @@ describe('durations', () => {
     expect(durationTicks('thirtysecond', false)).toBe(60);
     expect(durationTicks('thirtysecond', true)).toBe(40);
     expect(durationTicks('thirtysecond', true) * 3).toBe(BASE_TICKS.sixteenth);
+    expect(durationTicks('quarter', false, true)).toBe(720);
+    expect(durationTicks('half', false, true)).toBe(BASE_TICKS.half + BASE_TICKS.quarter);
+    expect(durationTicks('eighth', true, true)).toBe(160); // triplet wins
   });
 
   it('steps between note values, clamped at the ends', () => {
@@ -41,13 +44,16 @@ describe('durations', () => {
   it('all durations are whole ticks', () => {
     for (const base of Object.keys(BASE_TICKS) as Array<keyof typeof BASE_TICKS>) {
       expect(Number.isInteger(durationTicks(base, true))).toBe(true);
+      expect(Number.isInteger(durationTicks(base, false, true))).toBe(true);
     }
   });
 
   it('describes tick lengths', () => {
-    expect(describeDuration(160)).toEqual({ base: 'eighth', triplet: true });
-    expect(describeDuration(480)).toEqual({ base: 'quarter', triplet: false });
-    expect(describeDuration(40)).toEqual({ base: 'thirtysecond', triplet: true });
+    expect(describeDuration(160)).toEqual({ base: 'eighth', triplet: true, dotted: false });
+    expect(describeDuration(480)).toEqual({ base: 'quarter', triplet: false, dotted: false });
+    expect(describeDuration(40)).toEqual({ base: 'thirtysecond', triplet: true, dotted: false });
+    expect(describeDuration(720)).toEqual({ base: 'quarter', triplet: false, dotted: true });
+    expect(describeDuration(90)).toEqual({ base: 'thirtysecond', triplet: false, dotted: true });
     expect(describeDuration(100)).toBeNull();
   });
 });

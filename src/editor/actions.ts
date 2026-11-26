@@ -24,7 +24,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const song = () => docStore.getSong();
 const ed = () => editor.get();
-export const stepTicks = () => durationTicks(ed().base, ed().triplet);
+export const stepTicks = () => durationTicks(ed().base, ed().triplet, ed().dotted);
 
 /** Selection filtered to notes that still exist (a collaborator may have deleted some). */
 export function liveSelection(): ID[] {
@@ -79,9 +79,9 @@ export const rowTicks = () => ed().barsPerRow * barTicks(song().meta);
  * Set the note value for new notes, and apply it to any selected notes. If the selected notes all end at the
  * cursor (e.g. a note just entered from the fretboard), the cursor moves with their end.
  */
-export function setDuration(base: BaseDuration, triplet = ed().triplet) {
-  const ticks = durationTicks(base, triplet);
-  editor.set({ base, triplet });
+export function setDuration(base: BaseDuration, triplet = ed().triplet, dotted = ed().dotted && !triplet) {
+  const ticks = durationTicks(base, triplet, dotted);
+  editor.set({ base, triplet, dotted });
   const sel = liveSelection();
   if (!sel.length) return;
   const notes = sel.map((id) => song().notes[id]);
@@ -91,8 +91,13 @@ export function setDuration(base: BaseDuration, triplet = ed().triplet) {
   if (followCursor) editor.set({ cursor: start + ticks });
 }
 
+/** Triplet and dotted are exclusive: turning one on turns the other off. */
 export function toggleTriplet() {
-  setDuration(ed().base, !ed().triplet);
+  setDuration(ed().base, !ed().triplet, false);
+}
+
+export function toggleDotted() {
+  setDuration(ed().base, false, !ed().dotted);
 }
 
 export function moveCursor(deltaTicks: number) {

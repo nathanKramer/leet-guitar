@@ -50,6 +50,7 @@ export const editor = createStore<EditorState>({
   cursorString: 0,
   base: 'eighth',
   triplet: false,
+  dotted: false,
   chordMode: false,
   selection: [],
   playing: false,

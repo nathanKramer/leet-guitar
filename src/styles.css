@@ -17,7 +17,12 @@
   --s6: #f783ac;
   --s7: #66d9e8;
   color-scheme: dark;
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
   font-size: 14px;
 }
 
@@ -387,6 +392,11 @@ main > * {
 .tl-pm line.tl-pm-end {
   stroke-dasharray: none;
 }
+.tl-note .tl-dot {
+  fill: var(--text);
+  pointer-events: none;
+}
+
 .tl-note .tl-tuplet {
   fill: var(--note);
   font-size: 9px;
@@ -394,14 +404,30 @@ main > * {
   text-anchor: end;
   pointer-events: none;
 }
-.tl-note.s0 { --note: var(--s0); }
-.tl-note.s1 { --note: var(--s1); }
-.tl-note.s2 { --note: var(--s2); }
-.tl-note.s3 { --note: var(--s3); }
-.tl-note.s4 { --note: var(--s4); }
-.tl-note.s5 { --note: var(--s5); }
-.tl-note.s6 { --note: var(--s6); }
-.tl-note.s7 { --note: var(--s7); }
+.tl-note.s0 {
+  --note: var(--s0);
+}
+.tl-note.s1 {
+  --note: var(--s1);
+}
+.tl-note.s2 {
+  --note: var(--s2);
+}
+.tl-note.s3 {
+  --note: var(--s3);
+}
+.tl-note.s4 {
+  --note: var(--s4);
+}
+.tl-note.s5 {
+  --note: var(--s5);
+}
+.tl-note.s6 {
+  --note: var(--s6);
+}
+.tl-note.s7 {
+  --note: var(--s7);
+}
 
 /* Status bar */
 .statusbar {
@@ -646,12 +672,24 @@ kbd {
   top: 6px;
   right: 6px;
 }
-.pad.s0 { --note: var(--s0); }
-.pad.s1 { --note: var(--s1); }
-.pad.s2 { --note: var(--s2); }
-.pad.s3 { --note: var(--s3); }
-.pad.s4 { --note: var(--s4); }
-.pad.s5 { --note: var(--s5); }
+.pad.s0 {
+  --note: var(--s0);
+}
+.pad.s1 {
+  --note: var(--s1);
+}
+.pad.s2 {
+  --note: var(--s2);
+}
+.pad.s3 {
+  --note: var(--s3);
+}
+.pad.s4 {
+  --note: var(--s4);
+}
+.pad.s5 {
+  --note: var(--s5);
+}
 
 /* Sound + instrument */
 .sound-error {
@@ -900,11 +938,17 @@ button.danger:hover:not(:disabled) {
 .ar-body {
   flex: 1;
   display: flex;
+  align-items: flex-start;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
 }
+/* Pinned at the left while the bars scroll sideways. */
 .ar-names {
-  flex: 0 0 120px;
+  flex: none;
+  align-self: stretch;
+  position: sticky;
+  left: 0;
+  z-index: 1;
   background: var(--panel-2);
   border-right: 1px solid var(--border);
 }
@@ -926,9 +970,7 @@ button.danger:hover:not(:disabled) {
   opacity: 0.45;
 }
 .ar-scroll {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
+  flex: none;
 }
 .ar-scroll svg {
   display: block;

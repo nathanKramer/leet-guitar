@@ -12,7 +12,7 @@ import { useStore } from './editor/editorStore';
 import { handleKeyDown } from './editor/keyboard';
 import { loadProjectFile } from './editor/project';
 import { sortedTracks } from './model/commands';
-import { describeDuration, DURATION_NAMES, PPQ } from './model/durations';
+import { describeDuration, describeNoteValue, PPQ } from './model/durations';
 import { editor, usePeers, useSong } from './session';
 
 function position(tick: number, beatsPerBar: number, beatUnit: number) {
@@ -110,7 +110,7 @@ export default function App() {
               {sel.length ? (
                 <>
                   {sel.length} selected
-                  {selDur && ` · ${DURATION_NAMES[selDur.base]}${selDur.triplet ? ' triplet' : ''}`}
+                  {selDur && ` · ${describeNoteValue(selDur)}`}
                 </>
               ) : (
                 'No selection'
@@ -125,21 +125,22 @@ export default function App() {
               </span>
             ) : song.tracks[ed.trackId]?.kind === 'piano' ? (
               <span className="keys">
-                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> key ·{' '}
-                <kbd>Alt ↑↓</kbd> semitone · <kbd>Shift ↑↓</kbd> octave · <kbd>Alt ←→</kbd> move notes ·{' '}
-                <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>.</kbd> dotted · <kbd>←→</kbd> cursor
+                · <kbd>↑↓</kbd> key · <kbd>Alt ↑↓</kbd> semitone · <kbd>Shift ↑↓</kbd> octave · <kbd>Alt ←→</kbd> move
+                notes · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
               </span>
             ) : song.tracks[ed.trackId]?.kind === 'drums' ? (
               <span className="keys">
-                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>1-9</kbd> pads · <kbd>←→</kbd> cursor
-                · <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play
-                · <kbd>Del</kbd> delete
+                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>.</kbd> dotted · <kbd>1-9</kbd> pads ·{' '}
+                <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>PgUp PgDn</kbd> row ·{' '}
+                <kbd>Space</kbd> play · <kbd>Del</kbd> delete
               </span>
             ) : (
               <span className="keys">
-                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>0-9</kbd> type fret · <kbd>←→</kbd>{' '}
-                cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± · <kbd>Alt ←→↑↓</kbd> move notes ·{' '}
-                <kbd>P</kbd> palm mute · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
+                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>.</kbd> dotted · <kbd>0-9</kbd> type
+                fret · <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± · <kbd>Alt ←→↑↓</kbd>{' '}
+                move notes · <kbd>P</kbd> palm mute · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd>{' '}
+                delete
               </span>
             )}
           </footer>

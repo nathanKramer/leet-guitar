@@ -1,7 +1,7 @@
 # leet·guitar
 
 A browser MIDI editor for composing on guitar: click notes on a fretboard, lay them out in a tab-style timeline with
-whole/half/quarter/eighth/sixteenth values and triplets, play them back, and export a `.mid` file.
+whole/half/quarter/eighth/sixteenth values, triplets and dotted notes, play them back, and export a `.mid` file.
 
 ```sh
 npm install
@@ -32,7 +32,8 @@ npm run build
   and move.
   - **Selecting**: click a block; click and drag to select a rectangle of blocks; `Shift`-click adds or removes a
     block (`Shift`-drag adds a rectangle). You can also drag a box from the empty space below the tracks;
-    every block it touches is selected, and a click there deselects. Arrow keys move the selection, `Shift+arrows` grow it, `Ctrl+A` selects
+    every block it touches is selected, and a click there deselects. Dragging to the edge of the view scrolls it, so a selection (or a
+    move) can reach blocks off screen. Arrow keys move the selection, `Shift+arrows` grow it, `Ctrl+A` selects
     the whole song, and clicking a track's name selects its whole part. Click or drag across the bar numbers to
     select whole bars (every track).
   - **Moving and copying blocks**: drag a selection to move it to other bars or another track (hold `Alt` to copy
@@ -50,7 +51,7 @@ npm run build
 - **Count-in**: playback starts with one bar of metronome clicks in the song's time signature and tempo (seven
   eighth-note clicks in 7/8), the first one higher. The Play button counts the beats. **Count-in** in the toolbar
   turns it off or on; the setting is remembered in this browser.
-- **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet. Changing the value resizes any selected notes, including
+- **Note values**: `W` `H` `Q` `E` `S`, `T` toggles triplet, `.` toggles dotted (one and a half times as long). Changing the value resizes any selected notes, including
   the one you just entered; if they end at the cursor, the cursor moves with them. Press `Esc` first to change the
   value for the next note only.
 - **Typing frets**: `0`–`9` enters a fret on the cursor string; two digits in quick succession make fret 10+.

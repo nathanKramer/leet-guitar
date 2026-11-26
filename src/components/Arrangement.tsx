@@ -9,17 +9,30 @@ import { barTicks } from '../model/durations';
 import type { Note, Song } from '../model/types';
 
 const CELL_W = 72;
+/** Width of the track-name column, pinned at the left of the view. */
+const NAMES_W = 120;
 const ROW_H = 40;
 const HEAD_H = 24;
 /** Extra empty bars shown after the song, to move blocks into. */
 const SPARE_BARS = 2;
 const MIN_BARS = 8;
+/** How far past the song's end a selection or drag can stretch the grid (and edge-scrolling can carry it). */
+const MAX_EMPTY_BARS = 16;
 /** How far the pointer moves before a press becomes a drag. */
 const DRAG_PX = 4;
 /** Empty space kept below the tracks, to start a selection box from. */
 const FREE_MIN = 60;
-/** Within this distance of the scroller's edge, a drag scrolls it. */
+/** Within this distance of the view's edge (or past it), a drag scrolls the view that way. */
 const EDGE_PX = 40;
+/** Fastest edge scroll, in pixels per frame. */
+const MAX_SCROLL_PX = 24;
+
+/** Scroll speed for a pointer at `pos` in a view spanning [lo, hi]: faster the nearer (or further past) the edge. */
+function edgeSpeed(pos: number, lo: number, hi: number) {
+  if (pos < lo + EDGE_PX) return -Math.min(MAX_SCROLL_PX, Math.ceil((lo + EDGE_PX - pos) / 3));
+  if (pos > hi - EDGE_PX) return Math.min(MAX_SCROLL_PX, Math.ceil((pos - (hi - EDGE_PX)) / 3));
+  return 0;
+}
 
 /** What a drag in progress will do when released. */
 type Drag = { kind: 'move'; rows: number; bars: number; copy: boolean } | { kind: 'reorder'; at: number };
@@ -39,7 +52,10 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
   const selected = arr.selectedBlocks(ed.arrSel);
   const selectedKeys = new Set(selected.map(blockKey));
   const whole = arr.wholeBars(selected);
+  /** The view: scrolls sideways through bars and up and down through tracks. */
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Width of the view left for bars (beside the pinned track names). */
+  const gridW = (el: HTMLElement) => el.clientWidth - NAMES_W;
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   /** Bars that fit across the view, so the grid always reaches the right edge. */
@@ -52,7 +68,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
     const el = scrollRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
-      setFit(Math.max(MIN_BARS, Math.floor(el.clientWidth / CELL_W)));
+      setFit(Math.max(MIN_BARS, Math.floor(gridW(el) / CELL_W)));
       setViewH(el.clientHeight);
     });
     ro.observe(el);
@@ -64,7 +80,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
   const bars = Math.max(
     fit,
     used + SPARE_BARS,
-    lastSelected + 2 + (drag?.kind === 'move' ? Math.max(0, drag.bars) : 0),
+    Math.min(used + MAX_EMPTY_BARS, lastSelected + 2 + (drag?.kind === 'move' ? Math.max(0, drag.bars) : 0)),
     Math.floor((ed.playhead ?? ed.cursor) / bar) + 1,
   );
   const width = bars * CELL_W;
@@ -98,7 +114,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
     if (!el || !focus) return;
     const x = focus.bar * CELL_W;
     if (x < el.scrollLeft) el.scrollLeft = x - CELL_W / 2;
-    else if (x + CELL_W > el.scrollLeft + el.clientWidth) el.scrollLeft = x + CELL_W * 1.5 - el.clientWidth;
+    else if (x + CELL_W > el.scrollLeft + gridW(el)) el.scrollLeft = x + CELL_W * 1.5 - gridW(el);
   }, [focus?.bar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // While playing, follow the playhead.
@@ -106,7 +122,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
     const el = scrollRef.current;
     if (!el || ed.playhead === null) return;
     const x = (ed.playhead / bar) * CELL_W;
-    if (x < el.scrollLeft || x > el.scrollLeft + el.clientWidth - CELL_W) el.scrollLeft = x - CELL_W;
+    if (x < el.scrollLeft || x > el.scrollLeft + gridW(el) - CELL_W) el.scrollLeft = x - CELL_W;
   }, [ed.playhead !== null && Math.floor(ed.playhead / bar)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pointAt = (ev: { clientX: number; clientY: number }) => {
@@ -117,6 +133,40 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
   const blockAt = (x: number, y: number): Block => {
     const row = Math.min(tracks.length - 1, Math.max(0, Math.floor((y - HEAD_H) / ROW_H)));
     return { trackId: tracks[row].id, bar: Math.max(0, Math.floor(x / CELL_W)) };
+  };
+
+  /**
+   * Follow a drag until the button is released. While the pointer is near (or past) an edge of the view, the view
+   * keeps scrolling that way, and `move` is re-applied as the content slides under the pointer. Scrolling waits
+   * until `active()` says the press has become a drag.
+   */
+  const trackDrag = (move: (ev: PointerEvent) => void, up: (ev: PointerEvent) => void, active = () => true) => {
+    let last: PointerEvent | null = null;
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const el = scrollRef.current;
+      if (!last || !el || !active()) return;
+      const r = el.getBoundingClientRect();
+      const { scrollLeft, scrollTop } = el;
+      // The bars start right of the pinned track names, so that's the left edge.
+      el.scrollLeft += edgeSpeed(last.clientX, r.left + NAMES_W, r.left + el.clientWidth);
+      el.scrollTop += edgeSpeed(last.clientY, r.top, r.top + el.clientHeight);
+      if (el.scrollLeft !== scrollLeft || el.scrollTop !== scrollTop) move(last);
+    };
+    const onMove = (ev: PointerEvent) => {
+      last = ev;
+      move(ev);
+    };
+    const onUp = (ev: PointerEvent) => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      up(ev);
+    };
+    raf = requestAnimationFrame(tick);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -147,13 +197,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
         const to = { trackId: tracks[r1].id, bar: Math.max(0, Math.floor(b.x1 / CELL_W)) };
         arr.setSelection([...base, ...arr.blockRect(from, to)], from, to);
       };
-      const onUp = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        setBox(null);
-      };
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
+      trackDrag(onMove, () => setBox(null));
       return;
     }
 
@@ -173,15 +217,11 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
       arr.selectBars(b0, b0, base);
     }
 
-    const el = scrollRef.current!;
     let dragging = false;
     let result: Drag | null = null;
     const onMove = (ev: PointerEvent) => {
       if (!dragging && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < DRAG_PX) return;
       dragging = true;
-      const r = el.getBoundingClientRect();
-      if (ev.clientX < r.left + EDGE_PX) el.scrollLeft -= 12;
-      else if (ev.clientX > r.right - EDGE_PX) el.scrollLeft += 12;
       const p = pointAt(ev);
       if (mode === 'blocks') {
         const to = blockAt(p.x, p.y);
@@ -198,8 +238,6 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
       }
     };
     const onUp = (ev: PointerEvent) => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
       setDrag(null);
       const done = result as Drag | null;
       if (done?.kind === 'move') arr.moveBlocksBy(done.rows, done.bars, ev.altKey);
@@ -210,8 +248,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
         else if (!block && range && range.count > 1) arr.selectBars(b0, b0);
       }
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    trackDrag(onMove, onUp, () => dragging);
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
@@ -293,8 +330,8 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
           </button>
         </span>
       </div>
-      <div className="ar-body">
-        <div className="ar-names" style={{ paddingTop: HEAD_H }}>
+      <div className="ar-body" ref={scrollRef}>
+        <div className="ar-names" style={{ paddingTop: HEAD_H, width: NAMES_W }}>
           {tracks.map((t) => (
             <div
               key={t.id}
@@ -311,7 +348,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
             </div>
           ))}
         </div>
-        <div className="ar-scroll" ref={scrollRef}>
+        <div className="ar-scroll">
           <svg
             ref={svgRef}
             width={width}

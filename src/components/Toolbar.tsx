@@ -142,6 +142,13 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
           ³ Triplet
         </button>
         <button
+          className={ed.dotted ? 'seg active dotted' : 'seg dotted'}
+          onClick={act.toggleDotted}
+          title="Dotted: one and a half times the note value (.)"
+        >
+          • Dotted
+        </button>
+        <button
           className={ed.chordMode ? 'seg active' : 'seg'}
           onClick={() => editor.set((s) => ({ chordMode: !s.chordMode }))}
           title="Chord mode: placing a note doesn't advance the cursor (C, or hold Shift)"
