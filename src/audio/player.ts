@@ -32,6 +32,8 @@ export class Player {
   private onEnd: (() => void) | undefined;
   private active = false;
   private cancelClicks: (() => void) | undefined;
+  /** The song last mixed, so a newly selected engine starts with the same mix. */
+  private song: Song | undefined;
 
   constructor(engine: SoundEngine) {
     this.engine = engine;
@@ -42,6 +44,13 @@ export class Player {
     if (engine === this.engine) return;
     this.stop();
     this.engine = engine;
+    if (this.song) engine.mix(this.song);
+  }
+
+  /** Keep the engine's mix (pan) in step with the song, including during playback. */
+  mix(song: Song) {
+    this.song = song;
+    this.engine.mix(song);
   }
 
   preview(song: Song, trackId: ID, pitch: number, palmMute = false) {

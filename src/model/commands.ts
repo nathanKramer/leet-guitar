@@ -7,7 +7,7 @@ import { notePitch } from './drums';
 import { isStringed, TRACK_KINDS } from './instruments';
 import { placeClip, type Clip, type Placement } from './transfer';
 import { newId } from './id';
-import { META_ID } from './materialize';
+import { clampPan, META_ID } from './materialize';
 import type { ID, Note, Pattern, Song, SongMeta, Track, TrackKind } from './types';
 
 export const DEFAULT_TRACK_ID = 'track-1';
@@ -29,7 +29,7 @@ export function initDocument(song: Song): Op[] {
 }
 
 export function newTrack(kind: TrackKind, name: string, order: number): Omit<Track, 'id'> {
-  return { kind, name, order, ...TRACK_KINDS[kind].defaults };
+  return { kind, name, order, pan: 0, ...TRACK_KINDS[kind].defaults };
 }
 
 export function sortedTracks(song: Song): Track[] {
@@ -106,6 +106,11 @@ export function setTuning(song: Song, trackId: ID, tuning: number[]): { ops: Op[
     }
   }
   return { ops, moved, removed };
+}
+
+/** Stereo position: -1 (left) to 1 (right). */
+export function setTrackPan(id: ID, pan: number): Op[] {
+  return [{ t: 'patch', coll: 'tracks', id, patch: { pan: clampPan(pan) } }];
 }
 
 export function renameTrack(id: ID, name: string): Op[] {

@@ -3,7 +3,7 @@ import { dueUntil } from '../audio/player';
 import { addNote, addTrack, DEFAULT_TRACK_ID, initDocument, setTrackProgram } from '../model/commands';
 import { DocumentStore } from '../model/store';
 import type { Note } from '../model/types';
-import { DRUM_CHANNEL, trackChannels } from './channels';
+import { DRUM_CHANNEL, panValue, trackChannels } from './channels';
 import { exportMidi } from './export';
 
 function songWithTracks() {
@@ -49,5 +49,14 @@ describe('dueUntil', () => {
     expect(dueUntil(notes, 0, 0)).toBe(0);
     expect(dueUntil(notes, 0, 121)).toBe(2);
     expect(dueUntil(notes, 2, 1000)).toBe(4);
+  });
+});
+
+describe('panValue', () => {
+  it('maps -1..1 onto MIDI pan, with centre at 64', () => {
+    expect(panValue(-1)).toBe(0);
+    expect(panValue(0)).toBe(64);
+    expect(panValue(1)).toBe(127);
+    expect(panValue(-0.5)).toBe(32);
   });
 });

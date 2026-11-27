@@ -63,8 +63,8 @@ export class DrumSynth {
   }
 
   /** Returns the scheduled sources so playback can stop them. */
-  play(pitch: number, when: number, velocity: number): AudioScheduledSourceNode[] {
-    const { ctx, master } = audio();
+  play(pitch: number, when: number, velocity: number, dest: AudioNode): AudioScheduledSourceNode[] {
+    const { ctx } = audio();
     const level = Math.max(0.05, velocity / 127);
     const { voice, tune } = voiceFor(pitch);
     const out: AudioScheduledSourceNode[] = [];
@@ -74,7 +74,7 @@ export class DrumSynth {
       g.gain.setValueAtTime(0.0001, when);
       g.gain.exponentialRampToValueAtTime(peak * level, when + 0.002);
       g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
-      g.connect(master);
+      g.connect(dest);
       return g;
     };
     const osc = (type: OscillatorType, freq: number, dest: AudioNode, stopAt: number) => {

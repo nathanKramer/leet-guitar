@@ -20,6 +20,8 @@ export function readMeta(e: Entry | undefined): SongMeta {
   };
 }
 
+export const clampPan = (pan: number) => Math.min(1, Math.max(-1, pan));
+
 export function readTrack(id: ID, e: Entry | undefined): Track | null {
   if (!e?.alive) return null;
   const f = e.fields;
@@ -31,6 +33,7 @@ export function readTrack(id: ID, e: Entry | undefined): Track | null {
     frets: num(f.frets, 22),
     program: num(f.program, 25),
     bank: num(f.bank, 0),
+    pan: clampPan(num(f.pan, 0)),
     order: num(f.order, 0),
   };
 }

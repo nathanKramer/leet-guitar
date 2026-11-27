@@ -11,6 +11,8 @@ export interface SoundEngine {
   playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute?: boolean): void;
   /** Sound a note right away (placing notes, hitting pads). */
   preview(song: Song, track: Track, pitch: number, palmMute?: boolean): void;
+  /** Apply each track's mix settings (pan). Called whenever the song changes, so it takes effect during playback. */
+  mix(song: Song): void;
   /** Silence everything now, including notes already scheduled. */
   stopAll(): void;
   dispose(): void;

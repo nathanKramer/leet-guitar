@@ -82,6 +82,8 @@ new BroadcastChannelProvider(docId).connect(docStore, awareness);
 
 export const builtInEngine = new BuiltInEngine();
 export const player = new Player(builtInEngine);
+player.mix(docStore.getSong());
+docStore.subscribe(() => player.mix(docStore.getSong()));
 
 export function useSong() {
   return useSyncExternalStore(docStore.subscribe, docStore.getSong);

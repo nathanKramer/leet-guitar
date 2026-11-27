@@ -9,8 +9,8 @@ const RELEASE_S = 0.12;
 const LEVEL = 0.25;
 
 export class PianoSynth {
-  play(midi: number, when: number, duration: number, velocity: number): AudioScheduledSourceNode[] {
-    const { ctx, master } = audio();
+  play(midi: number, when: number, duration: number, velocity: number, dest: AudioNode): AudioScheduledSourceNode[] {
+    const { ctx } = audio();
     const f0 = midiToFrequency(midi);
     const vel = Math.max(0.05, velocity / 127);
     // Low notes ring for seconds, high notes die away quickly.
@@ -30,7 +30,7 @@ export class PianoSynth {
     tone.Q.value = 0.5;
     tone.frequency.setValueAtTime(Math.min(18000, f0 * (4 + 12 * vel)), when);
     tone.frequency.setTargetAtTime(Math.min(18000, f0 * 3), when + 0.01, decay * 0.6);
-    tone.connect(out).connect(master);
+    tone.connect(out).connect(dest);
 
     const sources: AudioScheduledSourceNode[] = [];
     const partial = (freq: number, amp: number, partialDecay: number) => {

@@ -1,13 +1,13 @@
 /**
  * Project files: the whole song as plain JSON (`.leetguitar`).
  *
- * A project keeps everything MIDI can't: track kinds, tunings, strings and frets, fret counts and instrument
- * choices. It stores the song itself, not the CRDT state, so files are small, readable and diffable; opening one
+ * A project keeps everything MIDI can't: track kinds, tunings, strings and frets, fret counts, instrument
+ * choices and pan. It stores the song itself, not the CRDT state, so files are small, readable and diffable; opening one
  * replaces the current document's contents as a single (undoable) edit that syncs to collaborators.
  */
 import { ZERO_STAMP, type Op } from './crdt';
 import { newId } from './id';
-import { BEAT_UNITS, DEFAULT_META, MAX_BEATS_PER_BAR, META_ID, readPattern, readTimeSig } from './materialize';
+import { BEAT_UNITS, clampPan, DEFAULT_META, MAX_BEATS_PER_BAR, META_ID, readPattern, readTimeSig } from './materialize';
 import { timeSigId } from './meter';
 import { newTrack, sortedPatterns, sortedTracks } from './commands';
 import type { ID, Note, Pattern, Song, SongMeta, TimeSigChange, Track, TrackKind } from './types';
@@ -100,6 +100,7 @@ export function parseProject(text: string): ParsedProject {
       frets: isInt(t.frets, 0, 36) ? t.frets : 0,
       program: isInt(t.program, 0, 127) ? t.program : 0,
       bank: isInt(t.bank, 0, 127) ? t.bank : 0,
+      pan: typeof t.pan === 'number' && Number.isFinite(t.pan) ? clampPan(t.pan) : 0,
       order: i,
     });
   }

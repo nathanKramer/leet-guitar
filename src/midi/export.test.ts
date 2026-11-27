@@ -8,7 +8,7 @@ import { exportMidi, vlq } from './export';
 const song: Song = {
   meta: { title: 'T', bpm: 120, beatsPerBar: 4, beatUnit: 4 },
   tracks: {
-    [DEFAULT_TRACK_ID]: { id: DEFAULT_TRACK_ID, kind: 'guitar', name: 'Gtr', tuning: STANDARD_TUNING, frets: 22, program: 25, bank: 0, order: 0 },
+    [DEFAULT_TRACK_ID]: { id: DEFAULT_TRACK_ID, kind: 'guitar', name: 'Gtr', tuning: STANDARD_TUNING, frets: 22, program: 25, bank: 0, pan: 0, order: 0 },
   },
   notes: {
     a: { id: 'a', trackId: DEFAULT_TRACK_ID, string: 5, fret: 0, start: 0, duration: 160, velocity: 100 },
@@ -39,6 +39,13 @@ describe('exportMidi', () => {
     const bytes = [...exportMidi(song)];
     const ons = findAll(bytes, (i) => bytes[i] === 0x90 && bytes[i + 2] === 100).map((i) => bytes[i + 1]);
     expect(ons).toEqual([40, 67]); // low E open, high E fret 3 = G4
+  });
+
+  it('writes pan (CC 10) only for off-centre tracks', () => {
+    const cc10 = (bytes: number[]) => findAll(bytes, (i) => bytes[i] === 0xb0 && bytes[i + 1] === 10).map((i) => bytes[i + 2]);
+    expect(cc10([...exportMidi(song)])).toEqual([]);
+    const panned = { ...song, tracks: { [DEFAULT_TRACK_ID]: { ...song.tracks[DEFAULT_TRACK_ID], pan: -1 } } };
+    expect(cc10([...exportMidi(panned)])).toEqual([0]);
   });
 
   it('assigns a channel per string when asked', () => {

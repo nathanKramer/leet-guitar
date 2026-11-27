@@ -36,6 +36,8 @@ export interface Track {
   program: number;
   /** Bank (MIDI CC 0) for SoundFont variations of the program; 0 = the standard General MIDI sound. */
   bank: number;
+  /** Stereo position, -1 (hard left) to 1 (hard right); 0 is centre. */
+  pan: number;
   order: number;
 }
 

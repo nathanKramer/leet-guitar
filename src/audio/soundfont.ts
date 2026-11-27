@@ -4,7 +4,14 @@
  */
 import { WorkletSynthesizer } from 'spessasynth_lib';
 import processorUrl from 'spessasynth_lib/dist/spessasynth_processor.min.js?url';
-import { MUTED_GUITAR_PROGRAM, PALM_MUTE_MAX_S, palmMuteChannels, trackChannels, usesMutedProgram } from '../midi/channels';
+import {
+  MUTED_GUITAR_PROGRAM,
+  PALM_MUTE_MAX_S,
+  palmMuteChannels,
+  panValue,
+  trackChannels,
+  usesMutedProgram,
+} from '../midi/channels';
 import { GM_PROGRAM_NAMES, type Instrument } from '../model/gm';
 import type { ID, Song, Track } from '../model/types';
 import { audio } from './context';
@@ -21,6 +28,8 @@ export class SoundFontEngine implements SoundEngine {
   private readonly out: GainNode;
   private channels = new Map<ID, number>();
   private muteChannels = new Map<ID, number>();
+  /** Pan (MIDI CC 10) last sent on each channel. */
+  private sentPan = new Map<number, number>();
   /**
    * The synth schedules events against its own clock, which runs a constant amount
    * behind the AudioContext's (~200 ms in Chromium, set when the worklet starts).
@@ -108,7 +117,21 @@ export class SoundFontEngine implements SoundEngine {
     }
     this.muteChannels = palmMuteChannels(song);
     for (const [id, ch] of this.muteChannels) this.setInstrument(ch, song.tracks[id], MUTED_GUITAR_PROGRAM, 0);
+    this.sentPan.clear();
+    this.mix(song);
     await this.syncClock();
+  }
+
+  /** Pan each track's channels (its palm-mute channel too). Only changed values are sent. */
+  mix(song: Song) {
+    const send = (ch: number, track: Track) => {
+      const value = panValue(track.pan);
+      if (this.sentPan.get(ch) === value) return;
+      this.synth.controllerChange(ch, 10, value);
+      this.sentPan.set(ch, value);
+    };
+    for (const [id, ch] of trackChannels(song)) send(ch, song.tracks[id]);
+    for (const [id, ch] of palmMuteChannels(song)) send(ch, song.tracks[id]);
   }
 
   playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute = false) {

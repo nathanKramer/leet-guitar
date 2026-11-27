@@ -595,6 +595,23 @@ kbd {
   white-space: nowrap;
   background: var(--panel-2);
 }
+.track-pan {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.track-pan input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.track-pan output {
+  width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .add-track > button {
   width: 100%;
 }

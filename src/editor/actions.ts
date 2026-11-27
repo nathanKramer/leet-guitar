@@ -347,6 +347,12 @@ export function setInstrument(trackId: ID, instrument: Instrument, oldName: stri
   docStore.transact(ops);
 }
 
+/** Set a track's stereo position (-1 left to 1 right). A slider drag makes one undo step. */
+export function setPan(trackId: ID, pan: number) {
+  if (!song().tracks[trackId]) return;
+  docStore.transact(cmd.setTrackPan(trackId, pan), { coalesce: `pan:${trackId}` });
+}
+
 export function deleteTrack(trackId: ID) {
   const remaining = cmd.sortedTracks(song()).filter((t) => t.id !== trackId);
   if (!remaining.length) return;

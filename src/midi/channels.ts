@@ -60,6 +60,11 @@ export function palmMuteChannels(song: Song): Map<ID, number> {
   return map;
 }
 
+/** A track's pan (-1 left to 1 right) as a MIDI pan controller (CC 10) value: 0 left, 64 centre, 127 right. */
+export function panValue(pan: number): number {
+  return Math.min(127, Math.max(0, Math.round(64 + pan * (pan < 0 ? 64 : 63))));
+}
+
 /** Per-string channels for the "1 channel / string" export layout. */
 export function stringChannels(track: Track): number[] {
   return track.tuning.map((_, s) => melodicChannel(s));

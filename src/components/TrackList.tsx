@@ -63,6 +63,32 @@ function InstrumentSelect({ track, font }: { track: Track; font: Instrument[] | 
   );
 }
 
+/** "C" at centre, otherwise how far left or right, e.g. "L 30", "R 100". */
+export function panLabel(pan: number): string {
+  const amount = Math.round(Math.abs(pan) * 100);
+  return amount === 0 ? 'C' : `${pan < 0 ? 'L' : 'R'} ${amount}`;
+}
+
+/** The active track's pan slider. Double-click centres it. */
+function PanSlider({ track }: { track: Track }) {
+  return (
+    <label className="track-pan" title="Pan: where the track sits between the left and right speakers (double-click to centre)">
+      <span className="muted">Pan</span>
+      <input
+        type="range"
+        min={-100}
+        max={100}
+        step={1}
+        value={Math.round(track.pan * 100)}
+        onChange={(e) => act.setPan(track.id, Number(e.target.value) / 100)}
+        onDoubleClick={() => act.setPan(track.id, 0)}
+        aria-valuetext={panLabel(track.pan)}
+      />
+      <output>{panLabel(track.pan)}</output>
+    </label>
+  );
+}
+
 /** The song's tracks as a list: click to edit one; the active track shows its instrument and tuning controls. */
 export function TrackList({ song, ed }: { song: Song; ed: EditorState }) {
   const tracks = sortedTracks(song);
@@ -83,7 +109,11 @@ export function TrackList({ song, ed }: { song: Song; ed: EditorState }) {
           const muted = ed.mutedTracks.includes(t.id);
           const soloed = ed.soloTracks.includes(t.id);
           const silent = !act.isAudible(t.id, ed);
-          const summary = [instrumentName(t, font), isStringed(t.kind) ? tuningLabel(t.kind, t.tuning) : null]
+          const summary = [
+            instrumentName(t, font),
+            isStringed(t.kind) ? tuningLabel(t.kind, t.tuning) : null,
+            t.pan !== 0 ? `Pan ${panLabel(t.pan)}` : null,
+          ]
             .filter(Boolean)
             .join(' · ');
           return (
@@ -149,9 +179,12 @@ export function TrackList({ song, ed }: { song: Song; ed: EditorState }) {
                 </span>
               </div>
               {active ? (
-                <div className="track-controls" onClick={(e) => e.stopPropagation()}>
-                  <InstrumentSelect track={t} font={font} />
-                  {isStringed(t.kind) && <TuningPicker track={t} />}
+                <div onClick={(e) => e.stopPropagation()}>
+                  <div className="track-controls">
+                    <InstrumentSelect track={t} font={font} />
+                    {isStringed(t.kind) && <TuningPicker track={t} />}
+                  </div>
+                  <PanSlider track={t} />
                 </div>
               ) : (
                 <div className="track-sub muted">

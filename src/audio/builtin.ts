@@ -1,6 +1,6 @@
 /** The default engine: synthesized in the browser, nothing to download. */
 import { midiToFrequency } from '../model/music';
-import type { Song, Track } from '../model/types';
+import type { ID, Song, Track } from '../model/types';
 import { audio } from './context';
 import { DrumSynth } from './drums';
 import { PianoSynth } from './piano';
@@ -70,6 +70,7 @@ class PluckSynth {
   }
 
   play(
+    dest: AudioNode,
     midi: number,
     when: number,
     duration: number,
@@ -77,7 +78,7 @@ class PluckSynth {
     tone: 'guitar' | 'bass' = 'guitar',
     muted = false,
   ): AudioScheduledSourceNode[] {
-    const { ctx, master } = audio();
+    const { ctx } = audio();
     const { buffer, rate } = this.voice(midi, tone, muted);
     const src = ctx.createBufferSource();
     src.buffer = buffer;
@@ -88,7 +89,7 @@ class PluckSynth {
     gain.gain.setValueAtTime(level, when);
     gain.gain.setValueAtTime(level, when + duration);
     gain.gain.linearRampToValueAtTime(0, when + duration + release);
-    src.connect(gain).connect(master);
+    src.connect(gain).connect(dest);
     src.start(when);
     src.stop(when + duration + release + 0.01);
     return [src];
@@ -100,18 +101,49 @@ export class BuiltInEngine implements SoundEngine {
   private piano = new PianoSynth();
   private drums = new DrumSynth();
   private sources = new Set<AudioScheduledSourceNode>();
+  /** One stereo panner per track, feeding the master bus. */
+  private panners = new Map<ID, StereoPannerNode>();
+  /** The song last mixed: its pans are newer than those of the copy playback started with. */
+  private mixed: Song | undefined;
 
   prepare(_song: Song) {
     this.drums.resetChoke();
   }
 
+  private bus(track: Track): AudioNode {
+    let p = this.panners.get(track.id);
+    if (!p) {
+      const { ctx, master } = audio();
+      p = ctx.createStereoPanner();
+      p.pan.value = this.mixed?.tracks[track.id]?.pan ?? track.pan;
+      p.connect(master);
+      this.panners.set(track.id, p);
+    }
+    return p;
+  }
+
+  mix(song: Song) {
+    this.mixed = song;
+    for (const [id, p] of this.panners) {
+      const track = song.tracks[id];
+      if (!track) {
+        p.disconnect();
+        this.panners.delete(id);
+      } else if (p.pan.value !== track.pan) {
+        // A short glide so moving the slider during playback doesn't click.
+        p.pan.setTargetAtTime(track.pan, p.context.currentTime, 0.01);
+      }
+    }
+  }
+
   playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute = false) {
+    const dest = this.bus(track);
     const nodes =
       track.kind === 'drums'
-        ? this.drums.play(pitch, when, velocity)
+        ? this.drums.play(pitch, when, velocity, dest)
         : track.kind === 'piano'
-          ? this.piano.play(pitch, when, duration, velocity)
-          : this.strings.play(pitch, when, duration, velocity, track.kind, palmMute);
+          ? this.piano.play(pitch, when, duration, velocity, dest)
+          : this.strings.play(dest, pitch, when, duration, velocity, track.kind, palmMute);
     for (const n of nodes) {
       this.sources.add(n);
       n.addEventListener('ended', () => this.sources.delete(n));
@@ -120,10 +152,11 @@ export class BuiltInEngine implements SoundEngine {
 
   preview(_song: Song, track: Track, pitch: number, palmMute = false) {
     const when = audio().ctx.currentTime + 0.01;
-    if (track.kind === 'drums') this.drums.play(pitch, when, 100);
-    else if (track.kind === 'piano') this.piano.play(pitch, when, 0.6, 96);
-    else if (palmMute) this.strings.play(pitch, when, MUTED_DECAY_S, 82, track.kind, true);
-    else this.strings.play(pitch, when, 0.6, 96, track.kind);
+    const dest = this.bus(track);
+    if (track.kind === 'drums') this.drums.play(pitch, when, 100, dest);
+    else if (track.kind === 'piano') this.piano.play(pitch, when, 0.6, 96, dest);
+    else if (palmMute) this.strings.play(dest, pitch, when, MUTED_DECAY_S, 82, track.kind, true);
+    else this.strings.play(dest, pitch, when, 0.6, 96, track.kind);
   }
 
   stopAll() {
@@ -139,5 +172,7 @@ export class BuiltInEngine implements SoundEngine {
 
   dispose() {
     this.stopAll();
+    for (const p of this.panners.values()) p.disconnect();
+    this.panners.clear();
   }
 }
