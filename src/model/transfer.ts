@@ -57,11 +57,15 @@ function fitPitch(pitch: number, lo: number, hi: number): number | null {
   return p >= lo && p <= hi ? p : null;
 }
 
+/** Drum hits only go on drum tracks; pitched notes (guitar, bass, piano) go on any pitched track. */
+export function canPlace(from: TrackKind, to: TrackKind): boolean {
+  return (from === 'drums') === (to === 'drums');
+}
+
 export function placeClip(clip: Clip, target: Track): Placement {
   const result: Placement = { notes: [], octaveShifted: 0, dropped: 0, refused: false };
-  const fromDrums = clip.kind === 'drums';
+  if (!canPlace(clip.kind, target.kind)) return { ...result, refused: true };
   const toDrums = target.kind === 'drums';
-  if (fromDrums !== toDrums) return { ...result, refused: true };
 
   // Identical instrument: keep exactly what was copied, fingering included.
   if (clip.kind === target.kind && sameTuning(clip.tuning, target.tuning)) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addNote, addTrack, deletePattern, initDocument, pasteNotes, savePattern, sortedTracks } from './commands';
 import type { DocState } from './crdt';
+import { canPlace } from './transfer';
 import { newProjectOps, openProjectOps, parseProject, serializeProject } from './project';
 import { DocumentStore } from './store';
 
@@ -50,6 +51,14 @@ describe('patterns', () => {
     s.transact(pasted.ops);
     const notes = pasted.ids.map((n) => s.getSong().notes[n]);
     expect(notes.map((n) => n.start).sort()).toEqual([1920, 1920, 2160]);
+  });
+
+  it('only fits drum patterns on drum tracks, and pitched patterns on pitched tracks', () => {
+    expect(canPlace('guitar', 'piano')).toBe(true);
+    expect(canPlace('piano', 'bass')).toBe(true);
+    expect(canPlace('drums', 'drums')).toBe(true);
+    expect(canPlace('drums', 'guitar')).toBe(false);
+    expect(canPlace('guitar', 'drums')).toBe(false);
   });
 
   it('deletes undoably', () => {

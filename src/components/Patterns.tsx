@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import * as act from '../editor/actions';
 import type { EditorState } from '../editor/editorStore';
 import { sortedPatterns } from '../model/commands';
-import type { Song } from '../model/types';
+import { canPlace } from '../model/transfer';
+import type { Song, TrackKind } from '../model/types';
 import { useAnchoredPopover } from './popover';
 
 const KIND_LABEL = { guitar: 'Guitar', bass: 'Bass', piano: 'Piano', drums: 'Drums' } as const;
@@ -13,11 +14,13 @@ const KIND_LABEL = { guitar: 'Guitar', bass: 'Bass', piano: 'Piano', drums: 'Dru
  */
 export function Patterns({ song, ed }: { song: Song; ed: EditorState }) {
   const selected = ed.selection.filter((id) => song.notes[id]).length;
-  const patterns = sortedPatterns(song);
+  const track = song.tracks[ed.trackId];
+  const all = sortedPatterns(song);
+  const patterns = track ? all.filter((p) => canPlace(p.kind, track.kind)) : [];
   return (
     <div className="patterns">
       {selected > 0 && <SavePattern key={ed.selection.join()} count={selected} />}
-      <AddPatternMenu patterns={patterns} />
+      <AddPatternMenu patterns={patterns} hidden={all.length - patterns.length} trackKind={track?.kind} />
     </div>
   );
 }
@@ -51,7 +54,16 @@ function SavePattern({ count }: { count: number }) {
   );
 }
 
-function AddPatternMenu({ patterns }: { patterns: ReturnType<typeof sortedPatterns> }) {
+function AddPatternMenu({
+  patterns,
+  hidden,
+  trackKind,
+}: {
+  patterns: ReturnType<typeof sortedPatterns>;
+  /** Saved patterns left out because they can't go on the active track. */
+  hidden: number;
+  trackKind: TrackKind | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -80,7 +92,13 @@ function AddPatternMenu({ patterns }: { patterns: ReturnType<typeof sortedPatter
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         disabled={!patterns.length}
-        title={patterns.length ? 'Insert a saved pattern at the playhead' : 'Select notes and name them to save a pattern'}
+        title={
+          patterns.length
+            ? 'Insert a saved pattern at the playhead'
+            : hidden
+              ? `No saved patterns fit a ${trackKind === 'drums' ? 'drum' : 'pitched'} track`
+              : 'Select notes and name them to save a pattern'
+        }
       >
         + Add pattern
       </button>
@@ -108,6 +126,12 @@ function AddPatternMenu({ patterns }: { patterns: ReturnType<typeof sortedPatter
               </div>
             ))}
             {!patterns.length && <p className="muted">No patterns saved.</p>}
+            {hidden > 0 && (
+              <p className="instrument-note">
+                {hidden} {trackKind === 'drums' ? 'pitched' : 'drum'} pattern{hidden === 1 ? '' : 's'} hidden (
+                {trackKind === 'drums' ? "can't go on a drum track" : 'drum patterns only go on drum tracks'}).
+              </p>
+            )}
           </div>
         </div>
       )}
