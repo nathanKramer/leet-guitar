@@ -125,6 +125,40 @@ describe('DocumentStore', () => {
     expect(b.getSong().notes[id]?.fret).toBe(3);
   });
 
+  it('coalesces a run of same-key edits into one undo entry', () => {
+    const a = newStore('a');
+    a.transact(setMeta({ title: 'Riff' }));
+    const start = a.getSong().meta.bpm;
+    for (let i = 1; i <= 40; i++) a.transact(setMeta({ bpm: start + i }), { coalesce: 'bpm', now: i * 50 });
+    expect(a.getSong().meta.bpm).toBe(start + 40);
+    a.undo();
+    expect(a.getSong().meta.bpm).toBe(start);
+    expect(a.getSong().meta.title).toBe('Riff');
+    a.redo();
+    expect(a.getSong().meta.bpm).toBe(start + 40);
+  });
+
+  it('starts a new undo entry after a pause, a different edit, or an undo', () => {
+    const a = newStore('a');
+    const start = a.getSong().meta.bpm;
+    a.transact(setMeta({ bpm: start + 1 }), { coalesce: 'bpm', now: 0 });
+    a.transact(setMeta({ bpm: start + 2 }), { coalesce: 'bpm', now: 5000 });
+    a.undo();
+    expect(a.getSong().meta.bpm).toBe(start + 1);
+
+    a.transact(setMeta({ title: 'X' }));
+    a.transact(setMeta({ bpm: start + 3 }), { coalesce: 'bpm', now: 5100 });
+    a.undo();
+    expect(a.getSong().meta.bpm).toBe(start + 1);
+    expect(a.getSong().meta.title).toBe('X');
+
+    a.transact(setMeta({ bpm: start + 4 }), { coalesce: 'bpm', now: 5200 });
+    a.undo();
+    a.transact(setMeta({ bpm: start + 5 }), { coalesce: 'bpm', now: 5300 });
+    a.undo();
+    expect(a.getSong().meta.bpm).toBe(start + 1);
+  });
+
   it('keeps identity of untouched collections', () => {
     const a = newStore('a');
     const before = a.getSong();

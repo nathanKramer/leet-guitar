@@ -40,7 +40,15 @@ function CommitInput(props: {
       max={props.max}
       title={props.title}
       value={draft}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        // Spinner clicks and arrow keys on a number input step the value without
+        // focusing or blurring it, so commit those right away. Typing produces an
+        // InputEvent with an inputType like 'insertText'; stepping does not.
+        const inputType = (e.nativeEvent as InputEvent).inputType;
+        if (props.type === 'number' && !inputType && v !== props.value) props.onCommit(v);
+      }}
       onBlur={() => draft !== props.value && props.onCommit(draft)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
@@ -97,7 +105,7 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
             value={String(meta.bpm)}
             onCommit={(v) => {
               const bpm = Math.round(Number(v));
-              if (bpm >= 20 && bpm <= 400) docStore.transact(setMeta({ bpm }));
+              if (bpm >= 20 && bpm <= 400) docStore.transact(setMeta({ bpm }), { coalesce: 'meta.bpm' });
             }}
           />
         </label>

@@ -15,6 +15,8 @@ type Listener = () => void;
 type OpsListener = (ops: StampedOp[]) => void;
 
 const UNDO_LIMIT = 200;
+/** Edits sharing a `coalesce` key within this many ms of each other merge into one undo entry. */
+const COALESCE_MS = 1000;
 
 /**
  * Owns the CRDT state for one document and exposes:
@@ -34,6 +36,8 @@ export class DocumentStore {
   private localOpsListeners = new Set<OpsListener>();
   private undoStack: Op[][] = [];
   private redoStack: Op[][] = [];
+  /** Key and time of the newest undo entry, when it was made with `coalesce`. */
+  private lastCoalesce: { key: string; at: number } | null = null;
 
   constructor(opts: { actor: string; state?: DocState }) {
     this.actor = opts.actor;
@@ -67,22 +71,40 @@ export class DocumentStore {
     return this.redoStack.length > 0;
   }
 
-  transact(ops: Op[], opts: { undoable?: boolean } = {}): void {
+  /**
+   * `coalesce` merges a run of edits into one undo entry: while each edit has the
+   * same key and comes within COALESCE_MS of the previous one, the newest entry's
+   * inverse (which restores the state from before the run) is kept and later
+   * inverses are dropped. For repeated edits to the same fields, such as holding
+   * a spinner arrow.
+   */
+  transact(ops: Op[], opts: { undoable?: boolean; coalesce?: string; now?: number } = {}): void {
     if (ops.length === 0) return;
     const inverse = this.commit(ops);
-    if (opts.undoable !== false && inverse.length) {
+    if (opts.undoable === false || !inverse.length) return;
+    const now = opts.now ?? Date.now();
+    const last = this.lastCoalesce;
+    const merge =
+      opts.coalesce !== undefined &&
+      last?.key === opts.coalesce &&
+      now - last.at <= COALESCE_MS &&
+      this.undoStack.length > 0;
+    if (!merge) {
       this.undoStack.push(inverse);
       if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
-      this.redoStack = [];
     }
+    this.redoStack = [];
+    this.lastCoalesce = opts.coalesce !== undefined ? { key: opts.coalesce, at: now } : null;
   }
 
   undo(): void {
+    this.lastCoalesce = null;
     const ops = this.undoStack.pop();
     if (ops) this.redoStack.push(this.commit(ops));
   }
 
   redo(): void {
+    this.lastCoalesce = null;
     const ops = this.redoStack.pop();
     if (ops) this.undoStack.push(this.commit(ops));
   }
