@@ -13,7 +13,8 @@ import type { ID, Note, Song } from '../model/types';
 import { docStore, editor } from '../session';
 import type { PeerState } from '../sync/awareness';
 
-const RULER_H = 22;
+/** The bar-number strip at the top of each row; clicking it moves the cursor (where playback starts). */
+const RULER_H = 30;
 const PAD = 8;
 /** Space between stacked rows. */
 const ROW_GAP = 16;
@@ -71,6 +72,9 @@ export function Timeline({ song, ed, peers }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [resize, setResize] = useState<Resize | null>(null);
+  /** Row whose ruler is pinned to the top of the view (its own ruler has scrolled out of sight), if any. */
+  const [stuck, setStuck] = useState<number | null>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
 
   const notes = useMemo(
     () => Object.values(song.notes).filter((n) => n.trackId === ed.trackId),
@@ -253,6 +257,22 @@ export function Timeline({ song, ed, peers }: Props) {
     }
   }, [focusRow, stride]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Pin the ruler of the row at the top of the view, so it can be clicked from anywhere in that row. As the next
+  // row's ruler comes up, it pushes the pinned one out of the way.
+  const pinRuler = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const y = el.scrollTop;
+    const r = Math.min(rows - 1, Math.floor(y / stride));
+    const pinned = y > rowTop(r) && y < rowTop(r) + rowBody - RULER_H ? r : null;
+    setStuck(pinned);
+    if (stickyRef.current) {
+      const push = pinned === null ? 0 : Math.min(0, rowTop(r) + rowBody - y - RULER_H);
+      stickyRef.current.style.transform = `translateY(${push}px)`;
+    }
+  };
+  useEffect(pinRuler, [stride, rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!track) return null;
   const isDrums = track.kind === 'drums';
   const clickToAdd = !isStringed(track.kind);
@@ -298,6 +318,26 @@ export function Timeline({ song, ed, peers }: Props) {
       if (!active && clickToAdd && !e.shiftKey && s !== null) placeNote(s, 0, { advance: false });
     };
     window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  /** Clicking a row's ruler moves the cursor there; dragging along it scrubs. */
+  const onRulerDown = (e: React.MouseEvent, r: number) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const left = (e.currentTarget as Element).closest('svg')!.getBoundingClientRect().left;
+    const seek = (ev: { clientX: number }) => {
+      const x = ev.clientX - left;
+      const tick = rowStart(r) + Math.min(rowEnd(r) - rowStart(r) - 1, Math.max(0, (x - gutter) / pptOf(r)));
+      const cursor = m.snap(tick, step);
+      if (cursor !== editor.get().cursor) editor.set({ cursor });
+    };
+    seek(e);
+    const onUp = () => {
+      window.removeEventListener('mousemove', seek);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', seek);
     window.addEventListener('mouseup', onUp);
   };
 
@@ -365,6 +405,64 @@ export function Timeline({ song, ed, peers }: Props) {
   const rowIndexes = Array.from({ length: rows }, (_, r) => r);
   const visibleRow = (r: number) => r >= 0 && r < rows;
 
+  /**
+   * A row's ruler: bar numbers and beat ticks, drawn at `top`. Used in the row itself and, pinned, at the top of
+   * the view.
+   */
+  const renderRuler = (r: number, top: number) => {
+    const right = width - RIGHT_PAD;
+    const from = rowStart(r);
+    const to = rowEnd(r);
+    const firstBar = m.barAt(from);
+    const lastBar = m.barAt(to - 1);
+    const ticks: JSX.Element[] = [];
+    for (let b = firstBar; b <= lastBar; b++) {
+      const start = m.barStart(b);
+      const beat = m.beatTicks(b);
+      for (let t = 0; t < m.barLength(b); t += beat) {
+        if (start + t < from || start + t >= to) continue;
+        const x = xIn(r, start + t);
+        const isBar = t === 0;
+        ticks.push(
+          <line
+            key={`${b}:${t}`}
+            x1={x}
+            x2={x}
+            y1={isBar ? top : top + RULER_H - 7}
+            y2={top + RULER_H}
+            className={isBar ? 'tl-ruler-bar' : 'tl-ruler-beat'}
+          />,
+        );
+      }
+    }
+    return (
+      <g className="tl-ruler-strip" onMouseDown={(e) => onRulerDown(e, r)}>
+        <rect x={gutter} y={top} width={right - gutter} height={RULER_H} className="tl-ruler" />
+        {ticks}
+        {Array.from({ length: lastBar - firstBar + 1 }, (_, i) => {
+          const b = firstBar + i;
+          const barStart = m.barStart(b);
+          // A row that starts partway through a bar still names the bar, with which beat it picks up from.
+          const partial = barStart < from;
+          const x = xIn(r, Math.max(barStart, from));
+          return (
+            <text key={i} x={x + 6} y={top + RULER_H / 2} className="tl-barnum">
+              {b + 1}
+              {partial && <tspan className="tl-timesig">{` beat ${Math.floor((from - barStart) / m.beatTicks(b)) + 1}`}</tspan>}
+              {!partial && m.changesAt(b) && <tspan className="tl-timesig">{` ${sigLabel(m.sigAt(b))}`}</tspan>}
+            </text>
+          );
+        })}
+        <line x1={gutter} x2={right} y1={top + RULER_H - 0.5} y2={top + RULER_H - 0.5} className="tl-ruler-edge" />
+      </g>
+    );
+  };
+
+  /** A marker's head in the ruler (cursor or playhead), so the play position reads at a glance. */
+  const rulerHead = (x: number, top: number, cls: string) => (
+    <path d={`M${x - 5},${top} h10 v5 l-5,5 l-5,-5 z`} className={cls} pointerEvents="none" />
+  );
+
   /** One row's background: ruler, lane labels, lane lines and grid. */
   const renderRow = (r: number) => {
     const top = rowTop(r);
@@ -405,21 +503,6 @@ export function Timeline({ song, ed, peers }: Props) {
     return (
       <g key={r} className="tl-row">
         <rect x={0} y={top} width={width} height={rowBody} className="tl-row-bg" />
-        <rect x={gutter} y={top} width={right - gutter} height={RULER_H} className="tl-ruler" />
-        {Array.from({ length: lastBar - firstBar + 1 }, (_, i) => {
-          const b = firstBar + i;
-          const barStart = m.barStart(b);
-          // A row that starts partway through a bar still names the bar, with which beat it picks up from.
-          const partial = barStart < from;
-          const x = xIn(r, Math.max(barStart, from));
-          return (
-            <text key={i} x={x + 5} y={top + 15} className="tl-barnum">
-              {b + 1}
-              {partial && <tspan className="tl-timesig">{` beat ${Math.floor((from - barStart) / m.beatTicks(b)) + 1}`}</tspan>}
-              {!partial && m.changesAt(b) && <tspan className="tl-timesig">{` ${sigLabel(m.sigAt(b))}`}</tspan>}
-            </text>
-          );
-        })}
         <rect x={0} y={top} width={gutter} height={rowBody} className="tl-gutter-bg" />
         {piano
           ? lanes.map((s) => (
@@ -442,6 +525,7 @@ export function Timeline({ song, ed, peers }: Props) {
               <line key={s} x1={gutter} x2={right} y1={laneY(r, s)} y2={laneY(r, s)} className="tl-string" />
             ))}
         {lines}
+        {renderRuler(r, top)}
         {lanes.map((s) => (
           <text
             key={`l${s}`}
@@ -510,7 +594,16 @@ export function Timeline({ song, ed, peers }: Props) {
 
   return (
     <div className="timeline">
-      <div className="tl-scroll" ref={scrollRef}>
+      <div className="tl-scroll" ref={scrollRef} onScroll={pinRuler}>
+        <div className="tl-sticky" ref={stickyRef}>
+          {stuck !== null && stuck < rows && (
+            <svg width={width} height={RULER_H}>
+              {renderRuler(stuck, 0)}
+              {cursorAt.r === stuck && rulerHead(cursorAt.x, 0, 'tl-cursor-head')}
+              {playAt && playAt.r === stuck && rulerHead(playAt.x, 0, 'tl-playhead-head')}
+            </svg>
+          )}
+        </div>
         <svg ref={svgRef} width={width} height={height} onMouseDown={onBackgroundDown}>
           {rowIndexes.map(renderRow)}
 
@@ -632,10 +725,16 @@ export function Timeline({ song, ed, peers }: Props) {
             })}
 
           {visibleRow(cursorAt.r) && (
-            <line x1={cursorAt.x} x2={cursorAt.x} y1={cursorAt.y1} y2={cursorAt.y2} className="tl-cursor" />
+            <>
+              <line x1={cursorAt.x} x2={cursorAt.x} y1={cursorAt.y1} y2={cursorAt.y2} className="tl-cursor" />
+              {rulerHead(cursorAt.x, cursorAt.y1, 'tl-cursor-head')}
+            </>
           )}
           {playAt && visibleRow(playAt.r) && (
-            <line x1={playAt.x} x2={playAt.x} y1={playAt.y1} y2={playAt.y2} className="tl-playhead" />
+            <>
+              <line x1={playAt.x} x2={playAt.x} y1={playAt.y1} y2={playAt.y2} className="tl-playhead" />
+              {rulerHead(playAt.x, playAt.y1, 'tl-playhead-head')}
+            </>
           )}
           {marquee && (
             <rect

@@ -315,13 +315,45 @@ main > * {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+.tl-sticky {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 2;
+}
+.tl-sticky svg {
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
+.tl-ruler-strip {
+  cursor: pointer;
+}
 .tl-ruler {
-  fill: var(--panel-2);
+  fill: #2a2f37;
+}
+.tl-ruler-strip:hover .tl-ruler {
+  fill: #323843;
+}
+.tl-ruler-edge {
+  stroke: #3d434d;
+}
+.tl-ruler-bar {
+  stroke: #59606b;
+}
+.tl-ruler-beat {
+  stroke: #474d57;
 }
 .tl-barnum {
-  fill: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.tl-cursor-head {
+  fill: var(--accent);
+}
+.tl-playhead-head {
+  fill: var(--playhead);
 }
 
 .tl-timesig,
