@@ -38,6 +38,8 @@ export interface Track {
   bank: number;
   /** Stereo position, -1 (hard left) to 1 (hard right); 0 is centre. */
   pan: number;
+  /** Mixer level, 0 (silent) to 1 (full level, the default). */
+  volume: number;
   order: number;
 }
 

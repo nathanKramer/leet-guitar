@@ -430,6 +430,12 @@ export function setPan(trackId: ID, pan: number) {
   docStore.transact(cmd.setTrackPan(trackId, pan), { coalesce: `pan:${trackId}` });
 }
 
+/** Set a track's mixer level (0 to 1). A slider drag makes one undo step. */
+export function setVolume(trackId: ID, volume: number) {
+  if (!song().tracks[trackId]) return;
+  docStore.transact(cmd.setTrackVolume(trackId, volume), { coalesce: `volume:${trackId}` });
+}
+
 export function deleteTrack(trackId: ID) {
   const remaining = cmd.sortedTracks(song()).filter((t) => t.id !== trackId);
   if (!remaining.length) return;

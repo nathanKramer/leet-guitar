@@ -49,7 +49,7 @@ export class Player {
     if (this.song) engine.mix(this.song, this.spread);
   }
 
-  /** Keep the engine's mix (pan) in step with the song, including during playback. */
+  /** Keep the engine's mix (volume, pan) in step with the song, including during playback. */
   mix(song: Song) {
     this.song = song;
     this.spread = trackSpread(song);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addNote, addTrack, initDocument, setMeta, setTrackPan, setTuning, sortedTracks } from './commands';
+import { addNote, addTrack, initDocument, setMeta, setTrackPan, setTrackVolume, setTuning, sortedTracks } from './commands';
 import { newProjectOps, openProjectOps, parseProject, projectFileName, serializeProject } from './project';
 import { DocumentStore } from './store';
 import type { Song } from './types';
@@ -35,6 +35,7 @@ function sampleSong() {
   const drums = addTrack(s.getSong(), 'drums');
   s.transact(drums.ops);
   s.transact(setTrackPan(drums.id, -0.4));
+  s.transact(setTrackVolume(drums.id, 0.6));
   s.transact(
     addNote(s.getSong(), { trackId: drums.id, string: 8, fret: 0, start: 0, duration: 120, velocity: 110 }).ops,
   );
@@ -53,6 +54,13 @@ describe('project files', () => {
     expect(file.tracks.map((t: { pan: number }) => t.pan)).toEqual([0, -0.4, 0]);
     delete file.tracks[1].pan;
     expect(parseProject(JSON.stringify(file)).tracks[1].pan).toBe(0);
+  });
+
+  it('keeps track volume, and opens older files (without volume) at full', () => {
+    const file = JSON.parse(serializeProject(sampleSong().getSong()));
+    expect(file.tracks.map((t: { volume: number }) => t.volume)).toEqual([1, 0.6, 1]);
+    delete file.tracks[1].volume;
+    expect(parseProject(JSON.stringify(file)).tracks[1].volume).toBe(1);
   });
 
   it('round-trips a song into a different document', () => {

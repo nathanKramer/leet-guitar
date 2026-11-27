@@ -99,14 +99,17 @@ class PluckSynth {
   }
 }
 
+/** A volume slider's position as gain: squared, like MIDI channel volume (see volumeValue), so it fades evenly by ear. */
+const faderGain = (volume: number) => volume * volume;
+
 export class BuiltInEngine implements SoundEngine {
   private strings = new PluckSynth();
   private piano = new PianoSynth();
   private drums = new DrumSynth();
   private sources = new Set<AudioScheduledSourceNode>();
-  /** One stereo panner per track, feeding the master bus. */
-  private panners = new Map<ID, StereoPannerNode>();
-  /** The song last mixed: its pans are newer than those of the copy playback started with. */
+  /** One channel strip per track (stereo panner into a volume fader), feeding the master bus. */
+  private strips = new Map<ID, { pan: StereoPannerNode; fader: GainNode }>();
+  /** The song last mixed: its levels and pans are newer than those of the copy playback started with. */
   private mixed: Song | undefined;
   private spread = new Map<ID, Spread>();
 
@@ -115,29 +118,34 @@ export class BuiltInEngine implements SoundEngine {
   }
 
   private bus(track: Track): AudioNode {
-    let p = this.panners.get(track.id);
-    if (!p) {
+    let strip = this.strips.get(track.id);
+    if (!strip) {
       const { ctx, master } = audio();
-      p = ctx.createStereoPanner();
-      p.pan.value = this.mixed?.tracks[track.id]?.pan ?? track.pan;
-      p.connect(master);
-      this.panners.set(track.id, p);
+      const latest = this.mixed?.tracks[track.id] ?? track;
+      strip = { pan: ctx.createStereoPanner(), fader: ctx.createGain() };
+      strip.pan.pan.value = latest.pan;
+      strip.fader.gain.value = faderGain(latest.volume);
+      strip.pan.connect(strip.fader).connect(master);
+      this.strips.set(track.id, strip);
     }
-    return p;
+    return strip.pan;
   }
 
   mix(song: Song, spread: Map<ID, Spread>) {
     this.mixed = song;
     this.spread = spread;
-    for (const [id, p] of this.panners) {
+    for (const [id, strip] of this.strips) {
       const track = song.tracks[id];
       if (!track) {
-        p.disconnect();
-        this.panners.delete(id);
-      } else if (p.pan.value !== track.pan) {
-        // A short glide so moving the slider during playback doesn't click.
-        p.pan.setTargetAtTime(track.pan, p.context.currentTime, 0.01);
+        strip.fader.disconnect();
+        this.strips.delete(id);
+        continue;
       }
+      // Short glides so moving a slider during playback doesn't click.
+      const now = strip.pan.context.currentTime;
+      if (strip.pan.pan.value !== track.pan) strip.pan.pan.setTargetAtTime(track.pan, now, 0.01);
+      const gain = faderGain(track.volume);
+      if (strip.fader.gain.value !== gain) strip.fader.gain.setTargetAtTime(gain, now, 0.01);
     }
   }
 
@@ -187,7 +195,7 @@ export class BuiltInEngine implements SoundEngine {
 
   dispose() {
     this.stopAll();
-    for (const p of this.panners.values()) p.disconnect();
-    this.panners.clear();
+    for (const s of this.strips.values()) s.fader.disconnect();
+    this.strips.clear();
   }
 }

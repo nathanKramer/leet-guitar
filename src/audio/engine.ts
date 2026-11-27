@@ -13,7 +13,7 @@ export interface SoundEngine {
   /** Sound a note right away (placing notes, hitting pads). */
   preview(song: Song, track: Track, pitch: number, palmMute?: boolean): void;
   /**
-   * Apply each track's mix settings: pan, and the detune in `spread` (the Player applies its delay).
+   * Apply each track's mix settings: volume, pan, and the detune in `spread` (the Player applies its delay).
    * Called whenever the song changes, so it takes effect during playback.
    */
   mix(song: Song, spread: Map<ID, Spread>): void;

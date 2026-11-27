@@ -84,8 +84,12 @@ export function Timeline({ song, ed, peers }: Props) {
   const step = stepTicks();
   const m = meter(song);
   const bpr = ed.barsPerRow;
-  const lastEnd = notes.reduce((mx, n) => Math.max(mx, n.start + n.duration), 0);
-  // Room after the last note (and the cursor) to keep writing, rounded up to whole rows.
+  // The song's end is the last note on any track, so every track's timeline runs the full length of the song.
+  const lastEnd = useMemo(
+    () => Object.values(song.notes).reduce((mx, n) => Math.max(mx, n.start + n.duration), 0),
+    [song.notes],
+  );
+  // Room after the song's last note (and the cursor) to keep writing, rounded up to whole rows.
   const bars = Math.max(8, m.barAt(Math.max(lastEnd, ed.cursor + step) - 1) + 2);
   const layout = rowLayout(m, bpr);
   const rows = Math.max(1, layout.count(bars));

@@ -10,6 +10,7 @@ import {
   palmMuteChannels,
   palmMuted,
   panValue,
+  volumeValue,
   stringChannels,
   trackChannels,
 } from './channels';
@@ -110,11 +111,15 @@ export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Ar
     const pmChannel = mode === 'per-track' ? muteChannel.get(track.id) : undefined;
     if (pmChannel !== undefined) events.push({ tick: 0, order: 0, bytes: [0xc0 | pmChannel, MUTED_GUITAR_PROGRAM] });
     // Pan (CC 10) on every channel the track plays on; centre is the default, so it is only written off-centre.
+    // Volume (CC 7) likewise, only when turned down from full.
+    const trackChannelSet = new Set([...channels, ...(pmChannel !== undefined ? [pmChannel] : [])]);
     if (track.pan !== 0) {
       const pan = panValue(track.pan);
-      for (const ch of new Set([...channels, ...(pmChannel !== undefined ? [pmChannel] : [])])) {
-        events.push({ tick: 0, order: 0, bytes: [0xb0 | ch, 10, pan] });
-      }
+      for (const ch of trackChannelSet) events.push({ tick: 0, order: 0, bytes: [0xb0 | ch, 10, pan] });
+    }
+    if (track.volume !== 1) {
+      const vol = volumeValue(track.volume);
+      for (const ch of trackChannelSet) events.push({ tick: 0, order: 0, bytes: [0xb0 | ch, 7, vol] });
     }
     for (const n of Object.values(song.notes)) {
       if (n.trackId !== track.id) continue;

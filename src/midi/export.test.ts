@@ -8,7 +8,7 @@ import { exportMidi, vlq } from './export';
 const song: Song = {
   meta: { title: 'T', bpm: 120, beatsPerBar: 4, beatUnit: 4 },
   tracks: {
-    [DEFAULT_TRACK_ID]: { id: DEFAULT_TRACK_ID, kind: 'guitar', name: 'Gtr', tuning: STANDARD_TUNING, frets: 22, program: 25, bank: 0, pan: 0, order: 0 },
+    [DEFAULT_TRACK_ID]: { id: DEFAULT_TRACK_ID, kind: 'guitar', name: 'Gtr', tuning: STANDARD_TUNING, frets: 22, program: 25, bank: 0, pan: 0, volume: 1, order: 0 },
   },
   notes: {
     a: { id: 'a', trackId: DEFAULT_TRACK_ID, string: 5, fret: 0, start: 0, duration: 160, velocity: 100 },
@@ -46,6 +46,13 @@ describe('exportMidi', () => {
     expect(cc10([...exportMidi(song)])).toEqual([]);
     const panned = { ...song, tracks: { [DEFAULT_TRACK_ID]: { ...song.tracks[DEFAULT_TRACK_ID], pan: -1 } } };
     expect(cc10([...exportMidi(panned)])).toEqual([0]);
+  });
+
+  it('writes volume (CC 7) only for tracks turned down', () => {
+    const cc7 = (bytes: number[]) => findAll(bytes, (i) => bytes[i] === 0xb0 && bytes[i + 1] === 7).map((i) => bytes[i + 2]);
+    expect(cc7([...exportMidi(song)])).toEqual([]);
+    const quiet = { ...song, tracks: { [DEFAULT_TRACK_ID]: { ...song.tracks[DEFAULT_TRACK_ID], volume: 0.5 } } };
+    expect(cc7([...exportMidi(quiet)])).toEqual([50]);
   });
 
   it('assigns a channel per string when asked', () => {

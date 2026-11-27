@@ -89,6 +89,32 @@ function PanSlider({ track }: { track: Track }) {
   );
 }
 
+/** A track's mixer fader, shown on every track. Double-click returns it to full. */
+function VolumeSlider({ track }: { track: Track }) {
+  const percent = Math.round(track.volume * 100);
+  return (
+    <label
+      className="track-volume"
+      title="Volume (double-click for full)"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <span className="muted">Vol</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={percent}
+        onChange={(e) => act.setVolume(track.id, Number(e.target.value) / 100)}
+        onDoubleClick={() => act.setVolume(track.id, 1)}
+        aria-label={`${track.name} volume`}
+        aria-valuetext={`${percent}%`}
+      />
+      <output>{percent}%</output>
+    </label>
+  );
+}
+
 /** The song's tracks as a list: click to edit one; the active track shows its instrument and tuning controls. */
 export function TrackList({ song, ed }: { song: Song; ed: EditorState }) {
   const tracks = sortedTracks(song);
@@ -192,6 +218,7 @@ export function TrackList({ song, ed }: { song: Song; ed: EditorState }) {
                   {counts.get(t.id) ? ` · ${counts.get(t.id)} note${counts.get(t.id) === 1 ? '' : 's'}` : ''}
                 </div>
               )}
+              <VolumeSlider track={t} />
             </li>
           );
         })}

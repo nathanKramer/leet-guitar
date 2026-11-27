@@ -21,6 +21,7 @@ export function readMeta(e: Entry | undefined): SongMeta {
 }
 
 export const clampPan = (pan: number) => Math.min(1, Math.max(-1, pan));
+export const clampVolume = (volume: number) => Math.min(1, Math.max(0, volume));
 
 export function readTrack(id: ID, e: Entry | undefined): Track | null {
   if (!e?.alive) return null;
@@ -34,6 +35,7 @@ export function readTrack(id: ID, e: Entry | undefined): Track | null {
     program: num(f.program, 25),
     bank: num(f.bank, 0),
     pan: clampPan(num(f.pan, 0)),
+    volume: clampVolume(num(f.volume, 1)),
     order: num(f.order, 0),
   };
 }

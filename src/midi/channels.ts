@@ -65,6 +65,15 @@ export function panValue(pan: number): number {
   return Math.min(127, Math.max(0, Math.round(64 + pan * (pan < 0 ? 64 : 63))));
 }
 
+/**
+ * A track's volume (0 to 1) as a MIDI channel volume (CC 7) value. Full volume is 100, the General MIDI default,
+ * so an untouched track sounds as it always has. Synths treat CC 7 as roughly gain = (value / 127)², which the
+ * built-in engine matches with gain = volume².
+ */
+export function volumeValue(volume: number): number {
+  return Math.min(127, Math.max(0, Math.round(volume * 100)));
+}
+
 /** Per-string channels for the "1 channel / string" export layout. */
 export function stringChannels(track: Track): number[] {
   return track.tuning.map((_, s) => melodicChannel(s));

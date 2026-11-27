@@ -7,7 +7,7 @@
  */
 import { ZERO_STAMP, type Op } from './crdt';
 import { newId } from './id';
-import { BEAT_UNITS, clampPan, DEFAULT_META, MAX_BEATS_PER_BAR, META_ID, readPattern, readTimeSig } from './materialize';
+import { BEAT_UNITS, clampPan, clampVolume, DEFAULT_META, MAX_BEATS_PER_BAR, META_ID, readPattern, readTimeSig } from './materialize';
 import { timeSigId } from './meter';
 import { newTrack, sortedPatterns, sortedTracks } from './commands';
 import type { ID, Note, Pattern, Song, SongMeta, TimeSigChange, Track, TrackKind } from './types';
@@ -101,6 +101,7 @@ export function parseProject(text: string): ParsedProject {
       program: isInt(t.program, 0, 127) ? t.program : 0,
       bank: isInt(t.bank, 0, 127) ? t.bank : 0,
       pan: typeof t.pan === 'number' && Number.isFinite(t.pan) ? clampPan(t.pan) : 0,
+      volume: typeof t.volume === 'number' && Number.isFinite(t.volume) ? clampVolume(t.volume) : 1,
       order: i,
     });
   }

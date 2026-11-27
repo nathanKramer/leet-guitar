@@ -11,6 +11,7 @@ import {
   panValue,
   trackChannels,
   usesMutedProgram,
+  volumeValue,
 } from '../midi/channels';
 import { GM_PROGRAM_NAMES, type Instrument } from '../model/gm';
 import type { ID, Song, Track } from '../model/types';
@@ -31,6 +32,8 @@ export class SoundFontEngine implements SoundEngine {
   private muteChannels = new Map<ID, number>();
   /** Pan (MIDI CC 10) last sent on each channel. */
   private sentPan = new Map<number, number>();
+  /** Volume (MIDI CC 7) last sent on each channel. */
+  private sentVolume = new Map<number, number>();
   /** Pitch wheel (detune) last sent on each channel. */
   private sentBend = new Map<number, number>();
   /**
@@ -121,14 +124,16 @@ export class SoundFontEngine implements SoundEngine {
     }
     this.muteChannels = palmMuteChannels(song);
     for (const [id, ch] of this.muteChannels) this.setInstrument(ch, song.tracks[id], MUTED_GUITAR_PROGRAM, 0);
+    await this.syncClock();
+    // Mixed after the clock probe, which sets channel volume on PROBE_CHANNEL (a track may play on it).
     this.sentPan.clear();
+    this.sentVolume.clear();
     this.sentBend.clear();
     this.mix(song, this.spread);
-    await this.syncClock();
   }
 
   /**
-   * Pan and detune each track's channels (its palm-mute channel too). Only changed values are sent.
+   * Volume, pan and detune each track's channels (its palm-mute channel too). Only changed values are sent.
    * Detune uses the pitch wheel at its default range of ±2 semitones (8192 is centre, 4096 per semitone).
    */
   mix(song: Song, spread: Map<ID, Spread>) {
@@ -138,6 +143,11 @@ export class SoundFontEngine implements SoundEngine {
       if (this.sentPan.get(ch) !== value) {
         this.synth.controllerChange(ch, 10, value);
         this.sentPan.set(ch, value);
+      }
+      const volume = volumeValue(track.volume);
+      if (this.sentVolume.get(ch) !== volume) {
+        this.synth.controllerChange(ch, 7, volume);
+        this.sentVolume.set(ch, volume);
       }
       if (track.kind === 'drums') return;
       const bend = Math.round(8192 + ((spread.get(track.id)?.cents ?? 0) / 100) * 4096);
