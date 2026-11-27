@@ -592,6 +592,38 @@ kbd {
 .add-track > button {
   width: 100%;
 }
+.patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.add-pattern > button {
+  width: 100%;
+}
+.save-pattern {
+  display: flex;
+  gap: 6px;
+}
+.save-pattern input {
+  flex: 1;
+  min-width: 0;
+}
+.pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.instrument-list .pattern-row .pattern-pick {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.instrument-list .pattern-row .tab-btn {
+  width: auto;
+  flex-shrink: 0;
+}
 .add-track-kinds {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

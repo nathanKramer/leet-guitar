@@ -4,20 +4,9 @@
  * pitch back into a lane and fret for that instrument.
  */
 import { isStringed } from './instruments';
-import type { Track, TrackKind } from './types';
+import type { PatternNote, Track, TrackKind } from './types';
 
-export interface ClipNote {
-  /** Sounding MIDI pitch. */
-  pitch: number;
-  /** Lane and fret on the source track, reused when pasting into an identical instrument. */
-  string: number;
-  fret: number;
-  /** Ticks from the start of the copied selection. */
-  offset: number;
-  duration: number;
-  velocity: number;
-  palmMute?: boolean;
-}
+export type ClipNote = PatternNote;
 
 /** Copy the named fields that are present (palm mute is only stored when set). */
 function pick<T extends object, K extends keyof T>(o: T, ...keys: K[]): Pick<T, K> {

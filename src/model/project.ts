@@ -5,11 +5,11 @@
  * choices. It stores the song itself, not the CRDT state, so files are small, readable and diffable; opening one
  * replaces the current document's contents as a single (undoable) edit that syncs to collaborators.
  */
-import type { Op } from './crdt';
+import { ZERO_STAMP, type Op } from './crdt';
 import { newId } from './id';
-import { DEFAULT_META, META_ID } from './materialize';
-import { newTrack, sortedTracks } from './commands';
-import type { ID, Note, Song, SongMeta, Track, TrackKind } from './types';
+import { DEFAULT_META, META_ID, readPattern } from './materialize';
+import { newTrack, sortedPatterns, sortedTracks } from './commands';
+import type { ID, Note, Pattern, Song, SongMeta, Track, TrackKind } from './types';
 
 export const PROJECT_FORMAT = 'leet-guitar';
 export const PROJECT_VERSION = 1;
@@ -21,6 +21,8 @@ export interface ProjectFile {
   meta: SongMeta;
   tracks: Track[];
   notes: Note[];
+  /** Saved patterns (absent in files from before patterns existed). */
+  patterns?: Pattern[];
 }
 
 export function serializeProject(song: Song): string {
@@ -29,10 +31,18 @@ export function serializeProject(song: Song): string {
   const notes = Object.values(song.notes)
     .filter((n) => order.has(n.trackId))
     .sort((a, b) => order.get(a.trackId)! - order.get(b.trackId)! || a.start - b.start || a.string - b.string);
-  const file: ProjectFile = { format: PROJECT_FORMAT, version: PROJECT_VERSION, meta: song.meta, tracks, notes };
+  const patterns = sortedPatterns(song);
+  const file: ProjectFile = {
+    format: PROJECT_FORMAT,
+    version: PROJECT_VERSION,
+    meta: song.meta,
+    tracks,
+    notes,
+    ...(patterns.length && { patterns }),
+  };
   // One note per line: readable, and diffs well under version control.
   return JSON.stringify(file, null, 2)
-    .replace(/\{\s+("id": [^{}\[\]]*?)\s+\}/g, (_, body: string) => `{ ${body.replace(/,\s+/g, ', ')} }`)
+    .replace(/\{\s+("(?:id|pitch)": [^{}\[\]]*?)\s+\}/g, (_, body: string) => `{ ${body.replace(/,\s+/g, ', ')} }`)
     .replace(/\[\s+([\d,\s]+?)\s+\]/g, (_, nums: string) => `[${nums.replace(/,\s+/g, ', ')}]`);
 }
 
@@ -40,6 +50,7 @@ export interface ParsedProject {
   meta: SongMeta;
   tracks: Track[];
   notes: Note[];
+  patterns: Pattern[];
   /** Notes left out because they were malformed or referred to a missing track or string. */
   skipped: number;
 }
@@ -108,7 +119,18 @@ export function parseProject(text: string): ParsedProject {
       ...(n.palmMute === true && (track.kind === 'guitar' || track.kind === 'bass') && { palmMute: true }),
     });
   }
-  return { meta, tracks, notes, skipped: rawNotes.length - notes.length };
+  const patterns: Pattern[] = [];
+  for (const p of Array.isArray(data.patterns) ? data.patterns : []) {
+    if (!isObj(p)) continue;
+    const pattern = readPattern(typeof p.id === 'string' ? p.id : newId(), {
+      fields: p,
+      stamps: {},
+      alive: true,
+      aliveStamp: ZERO_STAMP,
+    });
+    if (pattern) patterns.push(pattern);
+  }
+  return { meta, tracks, notes, patterns, skipped: rawNotes.length - notes.length };
 }
 
 /**
@@ -128,12 +150,16 @@ export function openProjectOps(song: Song, project: ParsedProject): { ops: Op[];
   for (const { id: _id, trackId, ...fields } of project.notes) {
     ops.push({ t: 'put', coll: 'notes', id: newId(), value: { ...fields, trackId: trackIds.get(trackId)! } });
   }
+  for (const { id: _id, ...fields } of project.patterns) {
+    ops.push({ t: 'put', coll: 'patterns', id: newId(), value: { ...fields } });
+  }
   return { ops, firstTrackId: trackIds.get(project.tracks[0].id)! };
 }
 
-/** Ops that delete every track and note in `song`. */
+/** Ops that delete every track, note and pattern in `song`. */
 function clearOps(song: Song): Op[] {
   return [
+    ...Object.keys(song.patterns).map((id): Op => ({ t: 'del', coll: 'patterns', id })),
     ...Object.keys(song.notes).map((id): Op => ({ t: 'del', coll: 'notes', id })),
     ...Object.keys(song.tracks).map((id): Op => ({ t: 'del', coll: 'tracks', id })),
   ];

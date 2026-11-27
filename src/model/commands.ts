@@ -8,11 +8,11 @@ import { isStringed, TRACK_KINDS } from './instruments';
 import { placeClip, type Clip, type Placement } from './transfer';
 import { newId } from './id';
 import { META_ID } from './materialize';
-import type { ID, Note, Song, SongMeta, Track, TrackKind } from './types';
+import type { ID, Note, Pattern, Song, SongMeta, Track, TrackKind } from './types';
 
 export const DEFAULT_TRACK_ID = 'track-1';
 
-const put = (coll: 'notes' | 'tracks' | 'meta', id: ID, value: Record<string, unknown>): Op => ({
+const put = (coll: 'notes' | 'tracks' | 'meta' | 'patterns', id: ID, value: Record<string, unknown>): Op => ({
   t: 'put',
   coll,
   id,
@@ -352,6 +352,24 @@ export function pasteNotes(
     ];
   });
   return { ops, ids, placement };
+}
+
+/** Save notes as a named pattern. Returns no ops if none of the notes exist. */
+export function savePattern(song: Song, ids: ID[], name: string): { ops: Op[]; id: ID | null } {
+  const clip = copyNotes(song, ids);
+  if (!clip?.notes.length) return { ops: [], id: null };
+  const id = newId();
+  const value: Omit<Pattern, 'id'> = { name, kind: clip.kind, tuning: [...clip.tuning], notes: clip.notes };
+  return { ops: [put('patterns', id, { ...value })], id };
+}
+
+export function deletePattern(id: ID): Op[] {
+  return [{ t: 'del', coll: 'patterns', id }];
+}
+
+/** Patterns sorted by name, for menus. */
+export function sortedPatterns(song: Song): Pattern[] {
+  return Object.values(song.patterns).sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
 }
 
 export function notesInTrack(song: Song, trackId: ID): Note[] {

@@ -199,28 +199,66 @@ export function cut() {
 }
 
 export function paste() {
-  if (!clipboard?.notes.length) return;
+  if (clipboard) placeAt(clipboard, ed().cursor, 'Pasted');
+}
+
+/**
+ * Put a clip on the active track at a tick, re-fingered for that instrument, and select it. `verb` names the
+ * action in messages ("Pasted", "Inserted").
+ */
+function placeAt(clip: Clip, at: number, verb: string) {
+  if (!clip.notes.length) return;
   const s = ed();
   const target = song().tracks[s.trackId];
   if (!target) return;
-  const { ops, ids, placement } = cmd.pasteNotes(song(), clipboard, s.trackId, s.cursor);
+  const { ops, ids, placement } = cmd.pasteNotes(song(), clip, s.trackId, at);
   if (placement.refused) {
     notify(
-      clipboard.kind === 'drums'
-        ? `Drum hits can only be pasted into a drum track.`
-        : `Pitched notes can't be pasted into a drum track.`,
+      clip.kind === 'drums'
+        ? `Drum hits can only go on a drum track.`
+        : `Pitched notes can't go on a drum track.`,
     );
     return;
   }
   docStore.transact(ops);
-  const end = Math.max(...clipboard.notes.map((c) => c.offset + c.duration));
-  editor.set({ selection: ids, cursor: s.cursor + end });
+  const end = Math.max(...clip.notes.map((c) => c.offset + c.duration));
+  editor.set({ selection: ids, cursor: at + end });
   const changes = [
     placement.octaveShifted && `${plural(placement.octaveShifted, 'note')} moved by an octave to fit ${target.name}`,
     placement.dropped &&
       `${plural(placement.dropped, 'note')} left out (no room for ${placement.dropped === 1 ? 'it' : 'them'})`,
   ].filter(Boolean);
-  if (changes.length) notify(`Pasted ${plural(ids.length, 'note')}: ${changes.join('; ')}.`);
+  if (changes.length) notify(`${verb} ${plural(ids.length, 'note')}: ${changes.join('; ')}.`);
+}
+
+/** Save the selected notes as a named pattern. Returns whether one was saved. */
+export function savePattern(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  const { ops } = cmd.savePattern(song(), liveSelection(), trimmed);
+  if (!ops.length) return false;
+  docStore.transact(ops);
+  notify(`Saved pattern “${trimmed}”.`);
+  return true;
+}
+
+/**
+ * Insert a saved pattern on the active track at the playhead: the cursor, or while playing, the playback
+ * position snapped to the current note value.
+ */
+export function insertPattern(id: ID) {
+  const pattern = song().patterns[id];
+  if (!pattern) return;
+  const { playhead, cursor } = ed();
+  const at = playhead === null ? cursor : Math.round(playhead / stepTicks()) * stepTicks();
+  placeAt(pattern, at, 'Inserted');
+}
+
+export function deletePattern(id: ID) {
+  const pattern = song().patterns[id];
+  if (!pattern) return;
+  docStore.transact(cmd.deletePattern(id));
+  notify(`Deleted pattern “${pattern.name}”. Ctrl+Z brings it back.`);
 }
 
 export function togglePlay() {

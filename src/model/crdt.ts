@@ -28,7 +28,7 @@ export function compareStamps(x: Stamp, y: Stamp): number {
   return x.a < y.a ? -1 : 1;
 }
 
-export const COLLECTIONS = ['meta', 'tracks', 'notes'] as const;
+export const COLLECTIONS = ['meta', 'tracks', 'notes', 'patterns'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 export type Fields = Record<string, unknown>;
 
@@ -52,14 +52,21 @@ export interface Entry {
 export type DocState = Record<Collection, Record<ID, Entry>>;
 
 export function emptyState(): DocState {
-  return { meta: {}, tracks: {}, notes: {} };
+  return { meta: {}, tracks: {}, notes: {}, patterns: {} };
+}
+
+/** Fill in collections missing from a state saved before they existed. Mutates and returns `state`. */
+export function normalizeState(state: DocState): DocState {
+  for (const coll of COLLECTIONS) state[coll] ??= {};
+  return state;
 }
 
 function getEntry(state: DocState, coll: Collection, id: ID): Entry {
-  let e = state[coll][id];
+  const records = (state[coll] ??= {});
+  let e = records[id];
   if (!e) {
     e = { fields: {}, stamps: {}, alive: false, aliveStamp: ZERO_STAMP };
-    state[coll][id] = e;
+    records[id] = e;
   }
   return e;
 }
@@ -123,7 +130,7 @@ export function mergeState(target: DocState, source: DocState): Array<[Collectio
 export function maxClock(state: DocState): number {
   let max = 0;
   for (const coll of COLLECTIONS) {
-    for (const e of Object.values(state[coll])) {
+    for (const e of Object.values(state[coll] ?? {})) {
       max = Math.max(max, e.aliveStamp.c);
       for (const s of Object.values(e.stamps)) max = Math.max(max, s.c);
     }

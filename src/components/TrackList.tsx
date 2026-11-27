@@ -9,6 +9,7 @@ import { instrumentChoices, isStringed } from '../model/instruments';
 import { tuningLabel } from '../model/tunings';
 import type { Song, Track, TrackKind } from '../model/types';
 import { AddTrackMenu } from './InstrumentPicker';
+import { Patterns } from './Patterns';
 import { TuningPicker } from './TuningPicker';
 
 const ICONS: Record<TrackKind, string> = {
@@ -163,6 +164,7 @@ export function TrackList({ song, ed }: { song: Song; ed: EditorState }) {
         })}
       </ul>
       <AddTrackMenu />
+      <Patterns song={song} ed={ed} />
     </aside>
   );
 }

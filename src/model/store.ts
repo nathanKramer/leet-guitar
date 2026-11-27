@@ -3,12 +3,13 @@ import {
   emptyState,
   maxClock,
   mergeState,
+  normalizeState,
   type Collection,
   type DocState,
   type Op,
   type StampedOp,
 } from './crdt';
-import { DEFAULT_META, materialize, META_ID, readMeta, readNote, readTrack } from './materialize';
+import { DEFAULT_META, materialize, META_ID, readMeta, readNote, readPattern, readTrack } from './materialize';
 import type { ID, Song } from './types';
 
 type Listener = () => void;
@@ -41,7 +42,7 @@ export class DocumentStore {
 
   constructor(opts: { actor: string; state?: DocState }) {
     this.actor = opts.actor;
-    this.state = opts.state ?? emptyState();
+    this.state = opts.state ? normalizeState(opts.state) : emptyState();
     this.clock = maxClock(this.state);
     this.song = materialize(this.state);
   }
@@ -141,7 +142,7 @@ export class DocumentStore {
   }
 
   private invert(op: Op): Op | null {
-    const e = this.state[op.coll][op.id];
+    const e = this.state[op.coll]?.[op.id];
     const { coll, id } = op;
     switch (op.t) {
       case 'put':
@@ -165,9 +166,10 @@ export class DocumentStore {
   /** Re-materialize only the touched records, keeping referential identity elsewhere. */
   private refresh(touched: Array<[Collection, ID]>): void {
     if (touched.length === 0) return;
-    let { meta, tracks, notes } = this.song;
+    let { meta, tracks, notes, patterns } = this.song;
     let tracksCopied = false;
     let notesCopied = false;
+    let patternsCopied = false;
     for (const [coll, id] of touched) {
       if (coll === 'meta') {
         if (id === META_ID) meta = readMeta(this.state.meta[id]);
@@ -176,6 +178,11 @@ export class DocumentStore {
         const t = readTrack(id, this.state.tracks[id]);
         if (t) tracks[id] = t;
         else delete tracks[id];
+      } else if (coll === 'patterns') {
+        if (!patternsCopied) (patterns = { ...patterns }), (patternsCopied = true);
+        const p = readPattern(id, this.state.patterns[id]);
+        if (p) patterns[id] = p;
+        else delete patterns[id];
       } else {
         if (!notesCopied) (notes = { ...notes }), (notesCopied = true);
         const n = readNote(id, this.state.notes[id]);
@@ -183,7 +190,7 @@ export class DocumentStore {
         else delete notes[id];
       }
     }
-    this.song = { meta, tracks, notes };
+    this.song = { meta, tracks, notes, patterns };
     this.listeners.forEach((fn) => fn());
   }
 }

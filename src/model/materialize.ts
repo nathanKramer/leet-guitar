@@ -1,7 +1,7 @@
 /** Turns raw CRDT entries into the typed Song view, with defaults and validation. */
 import type { DocState, Entry } from './crdt';
 import { STANDARD_TUNING } from './music';
-import type { ID, Note, Song, SongMeta, Track } from './types';
+import type { ID, Note, Pattern, PatternNote, Song, SongMeta, Track, TrackKind } from './types';
 
 export const META_ID = 'song';
 
@@ -54,6 +54,35 @@ export function readNote(id: ID, e: Entry | undefined): Note | null {
   };
 }
 
+const KINDS: TrackKind[] = ['guitar', 'bass', 'piano', 'drums'];
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+function readPatternNote(v: unknown): PatternNote | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const f = v as Record<string, unknown>;
+  for (const k of ['pitch', 'string', 'fret', 'offset', 'duration'] as const) {
+    if (!isNum(f[k])) return null;
+  }
+  return {
+    pitch: f.pitch as number,
+    string: f.string as number,
+    fret: f.fret as number,
+    offset: f.offset as number,
+    duration: f.duration as number,
+    velocity: num(f.velocity, 96),
+    ...(f.palmMute === true && { palmMute: true }),
+  };
+}
+
+export function readPattern(id: ID, e: Entry | undefined): Pattern | null {
+  if (!e?.alive) return null;
+  const f = e.fields;
+  if (!KINDS.includes(f.kind as TrackKind) || !Array.isArray(f.tuning) || !f.tuning.every(isNum)) return null;
+  const notes = (Array.isArray(f.notes) ? f.notes : []).map(readPatternNote).filter((n): n is PatternNote => !!n);
+  if (!notes.length) return null;
+  return { id, name: str(f.name, 'Pattern'), kind: f.kind as TrackKind, tuning: f.tuning as number[], notes };
+}
+
 export function materialize(state: DocState): Song {
   const tracks: Record<ID, Track> = {};
   for (const [id, e] of Object.entries(state.tracks)) {
@@ -65,5 +94,10 @@ export function materialize(state: DocState): Song {
     const n = readNote(id, e);
     if (n) notes[id] = n;
   }
-  return { meta: readMeta(state.meta[META_ID]), tracks, notes };
+  const patterns: Record<ID, Pattern> = {};
+  for (const [id, e] of Object.entries(state.patterns ?? {})) {
+    const p = readPattern(id, e);
+    if (p) patterns[id] = p;
+  }
+  return { meta: readMeta(state.meta[META_ID]), tracks, notes, patterns };
 }

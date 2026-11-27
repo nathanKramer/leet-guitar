@@ -46,9 +46,33 @@ export interface Note {
   palmMute?: boolean;
 }
 
+/** A named phrase saved from selected notes, to insert again later on any compatible track. */
+export interface Pattern {
+  id: ID;
+  name: string;
+  /** Kind and tuning of the track the notes came from, so they can be re-fingered for another instrument. */
+  kind: TrackKind;
+  tuning: number[];
+  notes: PatternNote[];
+}
+
+export interface PatternNote {
+  /** Sounding MIDI pitch. */
+  pitch: number;
+  /** Lane and fret on the source track. */
+  string: number;
+  fret: number;
+  /** Ticks from the start of the pattern. */
+  offset: number;
+  duration: number;
+  velocity: number;
+  palmMute?: boolean;
+}
+
 /** The materialized, read-only view of a document that the UI renders. */
 export interface Song {
   meta: SongMeta;
   tracks: Record<ID, Track>;
   notes: Record<ID, Note>;
+  patterns: Record<ID, Pattern>;
 }
