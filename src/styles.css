@@ -807,6 +807,10 @@ kbd {
 .pk-key.sustain.black {
   fill: #7a5a24;
 }
+.pk-key.out {
+  cursor: default;
+  opacity: 0.35;
+}
 .pk-key.cursor {
   stroke: var(--accent);
   stroke-width: 2.5;
@@ -962,6 +966,22 @@ kbd {
 }
 
 /* View tabs and arrangement */
+.view-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.entry-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.entry-switch .muted {
+  margin-right: 4px;
+}
 .view-tabs {
   display: flex;
   gap: 4px;

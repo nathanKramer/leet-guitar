@@ -135,7 +135,7 @@ function matchStrings(clip: Clip, target: Track, result: Placement): Placement {
   return rest.length ? fretClip(rest, target, result, taken) : result;
 }
 
-interface Spot {
+export interface Spot {
   string: number;
   fret: number;
 }
@@ -325,4 +325,36 @@ export function fingerings(
 /** The single most comfortable shape for a chord, ignoring what comes before or after. */
 export function bestFingering(pitches: number[], track: Pick<Track, 'tuning' | 'frets'>): Array<Spot | null> {
   return fingerings(pitches, track, 1)[0]?.spots ?? pitches.map(() => null);
+}
+
+/**
+ * Where to play one pitch on a guitar or bass, for entering notes by pitch (from the piano keys). Strings in
+ * `blocked` (already struck at the cursor) are avoided. `near` holds the frets of the surrounding notes: the
+ * spot within reach of the hand position they imply wins, so a line entered key by key stays in one position.
+ * With nothing around, the lowest spot wins (open strings first). Null if the pitch is out of range.
+ */
+export function spotForPitch(
+  pitch: number,
+  track: Pick<Track, 'tuning' | 'frets'>,
+  near: number[] = [],
+  blocked: Set<number> = new Set(),
+): Spot | null {
+  const fretted = near.filter((f) => f > 0).map((fret) => ({ string: 0, fret }));
+  const positions = handPositions(fretted);
+  const cost = (fret: number) => {
+    if (!positions) return fret;
+    // Open strings sound from any position, but a fretted note in reach is the more natural choice.
+    if (fret === 0) return 0.5;
+    const shift = Math.min(
+      ...positions.map((p) => (fret < p ? p - fret : fret > p + HAND_REACH ? fret - p - HAND_REACH : 0)),
+    );
+    return (shift ? 1 + 0.3 * shift : 0) + fret * 0.01;
+  };
+  let best: Spot | null = null;
+  track.tuning.forEach((open, string) => {
+    const fret = pitch - open;
+    if (fret < 0 || fret > track.frets || blocked.has(string)) return;
+    if (!best || cost(fret) < cost(best.fret)) best = { string, fret };
+  });
+  return best;
 }

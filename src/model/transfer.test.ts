@@ -3,7 +3,7 @@ import { addNote, addTrack, copyNotes, DEFAULT_TRACK_ID, initDocument, pasteNote
 import { notePitch } from './drums';
 import { PIANO_KEYS, STANDARD_TUNING } from './music';
 import { DocumentStore } from './store';
-import { bestFingering } from './transfer';
+import { bestFingering, spotForPitch } from './transfer';
 import type { ID, Song } from './types';
 
 function setup() {
@@ -190,5 +190,34 @@ describe('guitar and bass strings line up', () => {
     const n = [add(s, ids.guitar, 5, 3), add(s, ids.guitar, 2, 0, 480)];
     copyPaste(s, n, other);
     expect(sounding(s.getSong(), other)).toEqual(sounding(s.getSong(), ids.guitar));
+  });
+});
+
+describe('spotForPitch', () => {
+  const guitar = { tuning: STANDARD_TUNING, frets: 22 };
+
+  it('picks the lowest spot with nothing around (open strings first)', () => {
+    expect(spotForPitch(64, guitar)).toEqual({ string: 0, fret: 0 });
+    expect(spotForPitch(45, guitar)).toEqual({ string: 4, fret: 0 });
+    expect(spotForPitch(60, guitar)).toEqual({ string: 1, fret: 1 });
+  });
+
+  it('stays in the hand position of the surrounding notes', () => {
+    // Around frets 5-7, C4 is fret 5 on the G string rather than fret 1 on the B string.
+    expect(spotForPitch(60, guitar, [5, 7])).toEqual({ string: 2, fret: 5 });
+    // Up at the 12th fret, E4 is fretted in position (D string, fret 14) instead of the open string.
+    expect(spotForPitch(64, guitar, [12, 14])).toEqual({ string: 3, fret: 14 });
+    // A fretted note in reach beats an open string; an open string beats moving the hand.
+    expect(spotForPitch(64, guitar, [7, 9])).toEqual({ string: 2, fret: 9 }); // in reach: fretted
+    expect(spotForPitch(64, guitar, [1, 2])).toEqual({ string: 0, fret: 0 }); // fret 5 is out of reach: open
+  });
+
+  it('avoids strings already struck at the cursor', () => {
+    expect(spotForPitch(60, guitar, [5], new Set([2]))).toEqual({ string: 1, fret: 1 });
+  });
+
+  it('returns null for pitches out of range', () => {
+    expect(spotForPitch(30, guitar)).toBeNull();
+    expect(spotForPitch(64, guitar, [], new Set([0, 1, 2, 3, 4, 5]))).toBeNull();
   });
 });

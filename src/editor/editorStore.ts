@@ -17,6 +17,8 @@ export interface ArrangeSelection {
 /** Row lengths the timeline can be set to (zoom in = fewer bars per row). */
 export const BARS_PER_ROW = [0.25, 0.5, 1, 2, 4, 8];
 
+export type EntrySurface = 'fretboard' | 'piano';
+
 /** Local, per-user UI state. Never synced or persisted with the document. */
 export interface EditorState {
   /** Which view fills the main area: the note editor, or the bar-by-bar arrangement of all tracks. */
@@ -48,6 +50,11 @@ export interface EditorState {
   mutedTracks: ID[];
   /** Soloed tracks: while any are soloed, only they play (still a local listening choice). */
   soloTracks: ID[];
+  /**
+   * How to enter pitched notes: on a fretboard or a piano keyboard, whatever the track's instrument.
+   * Null until chosen: each track uses its own (fretboard for guitar and bass, keys for piano).
+   */
+  entry: EntrySurface | null;
   /** A short message for the status bar (e.g. what a paste had to change); clears itself. */
   notice: string | null;
 }

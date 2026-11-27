@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from 'react';
 import { BuiltInEngine } from './audio/builtin';
 import { Player } from './audio/player';
-import { createStore, type EditorState } from './editor/editorStore';
+import { createStore, type EditorState, type EntrySurface } from './editor/editorStore';
 import { DEFAULT_TRACK_ID, initDocument } from './model/commands';
 import { newId } from './model/id';
 import { DocumentStore } from './model/store';
@@ -62,6 +62,7 @@ export const editor = createStore<EditorState>({
   countBeat: null,
   mutedTracks: [],
   soloTracks: [],
+  entry: loadEntry(),
   notice: null,
 });
 
@@ -73,6 +74,26 @@ export const awareness = new Awareness({
   string: 0,
   trackId: DEFAULT_TRACK_ID,
 });
+const ENTRY_KEY = 'leet-guitar:entry';
+
+/** The fretboard / piano choice for entering notes is remembered in this browser. */
+function loadEntry(): EntrySurface | null {
+  try {
+    const v = localStorage.getItem(ENTRY_KEY);
+    return v === 'fretboard' || v === 'piano' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveEntry(entry: EntrySurface) {
+  try {
+    localStorage.setItem(ENTRY_KEY, entry);
+  } catch {
+    // Not remembered; the choice still applies to this tab.
+  }
+}
+
 editor.subscribe(() => {
   const s = editor.get();
   awareness.setLocal({ cursor: s.cursor, string: s.cursorString, trackId: s.trackId });

@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
-import { audition, placeNote, previewNote, shiftSelection } from '../editor/actions';
+import { audition, placeNote, placePitch, previewNote, shiftSelection } from '../editor/actions';
 import { clampShift, type NoteShift } from '../model/commands';
 import { editor } from '../session';
 import { laneLabel } from '../model/drums';
 import { isStringed } from '../model/instruments';
-import { pitchClassName, pitchName } from '../model/music';
-import type { ID, Song } from '../model/types';
+import { pitchClassName, pitchName, STANDARD_TUNING, stringLabel } from '../model/music';
+import { bestFingering, type Spot } from '../model/transfer';
+import type { ID, Song, Track } from '../model/types';
 
 const W = 1200;
 const OPEN_W = 58;
@@ -16,6 +17,9 @@ const SPACING = 30;
 const LABEL_H = 22;
 const INLAYS = [3, 5, 7, 9, 15, 17, 19, 21];
 const DOUBLE_INLAYS = [12, 24];
+
+/** The neck shown for entering notes on a piano track: a standard-tuned guitar. */
+const PIANO_NECK: Pick<Track, 'tuning' | 'frets'> = { tuning: STANDARD_TUNING, frets: 22 };
 
 interface Props {
   song: Song;
@@ -29,9 +33,13 @@ export function Fretboard({ song, ed }: Props) {
   const [drag, setDrag] = useState<{ anchor: ID; ids: ID[]; shift: NoteShift } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Guitar and bass show their own strings. A piano track gets a guitar neck: clicking places that pitch.
+  const ownNeck = !!track && isStringed(track.kind);
+  const neck = ownNeck ? track : PIANO_NECK;
+
   const geom = useMemo(() => {
-    if (!track) return null;
-    const N = track.frets;
+    if (!neck) return null;
+    const N = neck.frets;
     const boardStart = OPEN_W + NUT_W;
     const boardW = W - boardStart - 12;
     // Blend of real fret spacing (narrowing up the neck) and equal spacing,
@@ -42,13 +50,13 @@ export function Fretboard({ song, ed }: Props) {
     const cellRight = (f: number) => (f === 0 ? OPEN_W : wireX(f));
     // Open-string markers sit right of the string-name labels.
     const centerX = (f: number) => (f === 0 ? OPEN_W - 16 : (cellLeft(f) + cellRight(f)) / 2);
-    const strings = track.tuning.length;
+    const strings = neck.tuning.length;
     const stringY = (s: number) => TOP + s * SPACING;
     const boardH = (strings - 1) * SPACING + TOP * 2;
     return { N, boardStart, wireX, cellLeft, cellRight, centerX, strings, stringY, boardH };
-  }, [track]);
+  }, [neck]);
 
-  if (!track || !geom || !isStringed(track.kind)) return null;
+  if (!track || !geom || track.kind === 'drums') return null;
   const { N, boardStart, wireX, cellLeft, cellRight, centerX, strings, stringY, boardH } = geom;
   const height = boardH + LABEL_H;
 
@@ -57,6 +65,17 @@ export function Fretboard({ song, ed }: Props) {
   const sounding = Object.values(song.notes).filter(
     (n) => n.trackId === track.id && n.start <= focus && focus < n.start + n.duration,
   );
+  // Where each sounding note sits on the neck: its own string and fret, or for a piano track the most
+  // comfortable shape for the sounding pitches (notes the neck can't hold aren't shown).
+  const spots = new Map<ID, Spot>();
+  if (ownNeck) {
+    for (const n of sounding) spots.set(n.id, { string: n.string, fret: n.fret });
+  } else {
+    const pitch = (n: (typeof sounding)[number]) => track.tuning[n.string] + n.fret;
+    const byPitch = [...sounding].sort((a, b) => pitch(b) - pitch(a));
+    const shape = bestFingering(byPitch.map(pitch), neck);
+    byPitch.forEach((n, i) => shape[i] && spots.set(n.id, shape[i]));
+  }
   const selected = new Set(ed.selection);
   const moving = new Set(drag?.ids ?? []);
 
@@ -157,9 +176,9 @@ export function Fretboard({ song, ed }: Props) {
           <line key={f} x1={wireX(f)} x2={wireX(f)} y1={0} y2={boardH} className="fb-wire" />
         ))}
 
-        {track.tuning.map((_, s) => (
+        {neck.tuning.map((_, s) => (
           <g key={s}>
-            {s === ed.cursorString && (
+            {ownNeck && s === ed.cursorString && (
               <rect x={0} y={stringY(s) - SPACING / 2} width={wireX(N)} height={SPACING} className="fb-cursor-row" />
             )}
             <line
@@ -181,7 +200,7 @@ export function Fretboard({ song, ed }: Props) {
             </text>
           ))}
 
-        {track.tuning.map((_, s) =>
+        {neck.tuning.map((_, s) =>
           Array.from({ length: N + 1 }, (_, f) => (
             <rect
               key={`${s}-${f}`}
@@ -193,18 +212,21 @@ export function Fretboard({ song, ed }: Props) {
               onMouseEnter={() => !drag && setHover({ s, f })}
               onMouseDown={(e) => {
                 e.preventDefault();
-                placeNote(s, f, { advance: !e.shiftKey });
+                if (ownNeck) placeNote(s, f, { advance: !e.shiftKey });
+                else placePitch(neck.tuning[s] + f, { advance: !e.shiftKey });
               }}
             />
           )),
         )}
 
         {sounding.map((n) => {
+          const spot = spots.get(n.id);
+          if (!spot) return null;
           // Notes struck exactly at the cursor are bright; notes ringing over from earlier are dimmed.
           const isStart = ed.playing || n.start === ed.cursor;
           // Notes starting at the cursor can be dragged; ones ringing over from earlier let clicks through,
           // so clicking there still places a note.
-          const grabbable = isStart && !ed.playing;
+          const grabbable = isStart && !ed.playing && ownNeck;
           const cls = [
             'fb-note',
             selected.has(n.id) ? 'selected' : '',
@@ -219,8 +241,8 @@ export function Fretboard({ song, ed }: Props) {
               pointerEvents={grabbable ? undefined : 'none'}
               onMouseDown={grabbable ? (e) => onNoteDown(e, n.id) : undefined}
             >
-              <circle cx={centerX(n.fret)} cy={stringY(n.string)} r={11} />
-              <text x={centerX(n.fret)} y={stringY(n.string) + 4}>
+              <circle cx={centerX(spot.fret)} cy={stringY(spot.string)} r={11} />
+              <text x={centerX(spot.fret)} y={stringY(spot.string) + 4}>
                 {pitchClassName(track.tuning[n.string] + n.fret)}
               </text>
             </g>
@@ -248,14 +270,14 @@ export function Fretboard({ song, ed }: Props) {
           <g className="fb-ghost" pointerEvents="none">
             <circle cx={centerX(hover.f)} cy={stringY(hover.s)} r={11} />
             <text x={centerX(hover.f)} y={stringY(hover.s) + 4}>
-              {pitchClassName(track.tuning[hover.s] + hover.f)}
+              {pitchClassName(neck.tuning[hover.s] + hover.f)}
             </text>
           </g>
         )}
 
-        {track.tuning.map((_, s) => (
+        {neck.tuning.map((_, s) => (
           <text key={s} x={10} y={stringY(s) + 4} className="fb-stringname" pointerEvents="none">
-            {laneLabel(track, s)}
+            {ownNeck ? laneLabel(track, s) : stringLabel(neck.tuning, s)}
           </text>
         ))}
       </svg>
@@ -274,8 +296,12 @@ export function Fretboard({ song, ed }: Props) {
           })()
         ) : hover ? (
           <>
-            String {hover.s + 1} · Fret {hover.f} · <b>{pitchName(track.tuning[hover.s] + hover.f)}</b>
-            <span className="muted"> — click to place, shift-click to stack a chord; drag a note to move it</span>
+            String {hover.s + 1} · Fret {hover.f} · <b>{pitchName(neck.tuning[hover.s] + hover.f)}</b>
+            <span className="muted">
+              {' '}
+              — click to place, shift-click to stack a chord
+              {ownNeck ? '; drag a note to move it' : ' (placed on the piano at this pitch)'}
+            </span>
           </>
         ) : (
           <span className="muted">

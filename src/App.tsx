@@ -6,9 +6,9 @@ import { PianoKeys } from './components/PianoKeys';
 import { Timeline } from './components/Timeline';
 import { Toolbar } from './components/Toolbar';
 import { TrackList } from './components/TrackList';
-import { selectTrack } from './editor/actions';
+import { entrySurface, selectTrack, setEntry } from './editor/actions';
 import { setView } from './editor/arrange';
-import { useStore } from './editor/editorStore';
+import { useStore, type EditorState } from './editor/editorStore';
 import { handleKeyDown } from './editor/keyboard';
 import { loadProjectFile } from './editor/project';
 import { sortedTracks } from './model/commands';
@@ -25,6 +25,45 @@ function position(song: Song, tick: number) {
   const into = tick - m.barStart(bar);
   const sub = into % beat;
   return `${bar + 1}.${Math.floor(into / beat) + 1}${sub ? ` +${sub}t` : ''}`;
+}
+
+/** The surface for entering notes on the current track. */
+function EntrySurface({ song, ed }: { song: Song; ed: EditorState }) {
+  const track = song.tracks[ed.trackId];
+  if (!track) return null;
+  const surface = entrySurface(track, ed.entry);
+  if (surface === 'drums') return <DrumPads song={song} ed={ed} />;
+  return surface === 'fretboard' ? <Fretboard song={song} ed={ed} /> : <PianoKeys song={song} ed={ed} />;
+}
+
+/** Fretboard or piano keys, for entering notes on any pitched track (drum tracks always get pads). */
+function EntrySwitch({ song, ed }: { song: Song; ed: EditorState }) {
+  const track = song.tracks[ed.trackId];
+  if (!track) return null;
+  const surface = entrySurface(track, ed.entry);
+  if (surface === 'drums') return null;
+  const choice = (value: 'fretboard' | 'piano', label: string, title: string) => (
+    <button
+      role="radio"
+      aria-checked={surface === value}
+      className={surface === value ? 'seg active' : 'seg'}
+      onClick={() => setEntry(value)}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="entry-switch" role="radiogroup" aria-label="Enter notes on">
+      <span className="muted">Enter notes on</span>
+      {choice('fretboard', 'Fretboard', 'Enter notes on a fretboard (piano tracks get a standard-tuned guitar neck)')}
+      {choice(
+        'piano',
+        'Piano',
+        'Enter notes on a piano keyboard (on guitar and bass, the string and fret are picked for you)',
+      )}
+    </div>
+  );
 }
 
 export default function App() {
@@ -71,33 +110,34 @@ export default function App() {
       <div className="workspace">
         <TrackList song={song} ed={ed} />
         <main>
-          <div className="view-tabs" role="tablist" aria-label="View">
-            <button
-              role="tab"
-              aria-selected={ed.view === 'edit'}
-              className={ed.view === 'edit' ? 'seg active' : 'seg'}
-              onClick={() => setView('edit')}
-              title="Edit the notes of one track"
-            >
-              Edit
-            </button>
-            <button
-              role="tab"
-              aria-selected={ed.view === 'arrange'}
-              className={ed.view === 'arrange' ? 'seg active' : 'seg'}
-              onClick={() => setView('arrange')}
-              title="Arrange the song bar by bar, across all tracks"
-            >
-              Arrange
-            </button>
+          <div className="view-bar">
+            <div className="view-tabs" role="tablist" aria-label="View">
+              <button
+                role="tab"
+                aria-selected={ed.view === 'edit'}
+                className={ed.view === 'edit' ? 'seg active' : 'seg'}
+                onClick={() => setView('edit')}
+                title="Edit the notes of one track"
+              >
+                Edit
+              </button>
+              <button
+                role="tab"
+                aria-selected={ed.view === 'arrange'}
+                className={ed.view === 'arrange' ? 'seg active' : 'seg'}
+                onClick={() => setView('arrange')}
+                title="Arrange the song bar by bar, across all tracks"
+              >
+                Arrange
+              </button>
+            </div>
+            {ed.view === 'edit' && <EntrySwitch song={song} ed={ed} />}
           </div>
           {ed.view === 'arrange' ? (
             <Arrangement song={song} ed={ed} />
           ) : (
             <>
-              <Fretboard song={song} ed={ed} />
-              <PianoKeys song={song} ed={ed} />
-              <DrumPads song={song} ed={ed} />
+              <EntrySurface song={song} ed={ed} />
               <Timeline song={song} ed={ed} peers={peers} />
             </>
           )}

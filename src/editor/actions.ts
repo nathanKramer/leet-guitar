@@ -3,13 +3,14 @@ import * as cmd from '../model/commands';
 import { setTimeSig as setBarsTimeSig } from '../model/arrange';
 import { durationTicks, type BaseDuration } from '../model/durations';
 import { meter } from '../model/meter';
-import { TRACK_KINDS } from '../model/instruments';
+import { isStringed, TRACK_KINDS } from '../model/instruments';
+import { pitchName } from '../model/music';
 import { trackKindFor, type Instrument } from '../model/gm';
-import type { Clip } from '../model/transfer';
-import type { ID, TimeSig, TrackKind } from '../model/types';
-import { BARS_PER_ROW, type EditorState } from './editorStore';
+import { spotForPitch, type Clip } from '../model/transfer';
+import type { ID, TimeSig, Track, TrackKind } from '../model/types';
+import { BARS_PER_ROW, type EditorState, type EntrySurface } from './editorStore';
 import { rowLayout } from './rows';
-import { docStore, editor, player, saveCountIn } from '../session';
+import { docStore, editor, player, saveCountIn, saveEntry } from '../session';
 
 let clipboard: Clip | null = null;
 
@@ -65,6 +66,45 @@ export function placeNote(string: number, fret: number, opts: { advance: boolean
     cursor: opts.advance && !s.chordMode ? s.cursor + duration : s.cursor,
   });
   return id;
+}
+
+/**
+ * Place a note by pitch, from whichever surface is showing. Piano tracks have one lane per key. On a guitar or
+ * bass the string and fret are chosen: a string not already struck at the cursor (so a chord builds up), in
+ * reach of the hand position of the notes at the cursor and just before it.
+ */
+export function placePitch(pitch: number, opts: { advance: boolean }) {
+  const s = ed();
+  const track = song().tracks[s.trackId];
+  if (!track) return;
+  if (!isStringed(track.kind)) {
+    const lane = track.tuning.indexOf(pitch);
+    if (lane < 0) return notify(`${pitchName(pitch)} isn't on this instrument`);
+    return placeNote(lane, 0, opts);
+  }
+  const notes = cmd.notesInTrack(song(), track.id);
+  const atCursor = notes.filter((n) => n.start === s.cursor);
+  // The same pitch already struck at the cursor: strike it again in the same place.
+  const same = atCursor.find((n) => track.tuning[n.string] + n.fret === pitch);
+  if (same) return placeNote(same.string, same.fret, opts);
+  const before = Math.max(-1, ...notes.filter((n) => n.start < s.cursor).map((n) => n.start));
+  const near = [...atCursor, ...notes.filter((n) => n.start === before)].map((n) => n.fret);
+  const blocked = new Set(atCursor.map((n) => n.string));
+  // Every string taken: replace one rather than refuse.
+  const spot = spotForPitch(pitch, track, near, blocked) ?? spotForPitch(pitch, track, near);
+  if (!spot) return notify(`${pitchName(pitch)} is out of range for this ${track.kind}`);
+  return placeNote(spot.string, spot.fret, opts);
+}
+
+/** Which surface enters notes on a track: the chosen one for pitched tracks, else the track's own. */
+export function entrySurface(track: Pick<Track, 'kind'>, entry: EntrySurface | null): EntrySurface | 'drums' {
+  if (track.kind === 'drums') return 'drums';
+  return entry ?? (track.kind === 'piano' ? 'piano' : 'fretboard');
+}
+
+export function setEntry(entry: EntrySurface) {
+  editor.set({ entry });
+  saveEntry(entry);
 }
 
 export function setFret(id: ID, fret: number) {
