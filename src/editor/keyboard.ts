@@ -90,6 +90,7 @@ export function handleKeyDown(e: KeyboardEvent) {
       case 'ArrowLeft': {
         const dir = e.key === 'ArrowRight' ? 1 : -1;
         if (e.altKey && hasSel) act.moveSelection(dir * act.stepTicks());
+        else if (e.shiftKey) act.extendSelection(dir);
         else act.stepCursor(dir);
         break;
       }

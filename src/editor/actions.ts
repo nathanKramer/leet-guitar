@@ -190,6 +190,33 @@ export function stepCursor(dir: 1 | -1) {
   here.forEach(previewNote);
 }
 
+/**
+ * Where a Shift+←/→ selection grows from. It lasts while the cursor stays where the last extension left it;
+ * moving the cursor any other way (or switching track) starts a new one.
+ */
+let extension: { anchor: number; cursor: number; trackId: ID; base: ID[] } | null = null;
+
+/**
+ * Shift+←/→: step the cursor and select every note sounding anywhere between where the extension started and the
+ * cursor (both positions included), on top of whatever was selected when it started. Stepping back shrinks it.
+ */
+export function extendSelection(dir: 1 | -1) {
+  const { cursor: from, trackId } = ed();
+  if (!extension || extension.cursor !== from || extension.trackId !== trackId) {
+    extension = { anchor: from, cursor: from, trackId, base: liveSelection() };
+  }
+  const step = stepTicks();
+  const cursor = meter(song()).step(from, step, dir);
+  const lo = Math.min(extension.anchor, cursor);
+  const hi = Math.max(extension.anchor, cursor) + step;
+  const inRange = cmd
+    .notesInTrack(song(), trackId)
+    .filter((n) => n.start < hi && n.start + n.duration > lo)
+    .map((n) => n.id);
+  extension.cursor = cursor;
+  editor.set({ cursor, selection: [...new Set([...extension.base, ...inRange])] });
+}
+
 /** Zoom: step the number of bars per row (dir -1 = fewer bars, i.e. zoom in). */
 export function stepBarsPerRow(dir: 1 | -1) {
   editor.set((s) => {

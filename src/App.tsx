@@ -169,20 +169,20 @@ export default function App() {
               </span>
             ) : song.tracks[ed.trackId]?.kind === 'piano' ? (
               <span className="keys">
-                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>.</kbd> dotted · <kbd>←→</kbd> cursor
+                <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>.</kbd> dotted · <kbd>←→</kbd> cursor · <kbd>Shift ←→</kbd> extend selection
                 · <kbd>↑↓</kbd> key · <kbd>Alt ↑↓</kbd> semitone · <kbd>Shift ↑↓</kbd> octave · <kbd>Alt ←→</kbd> move
                 notes · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd> delete
               </span>
             ) : song.tracks[ed.trackId]?.kind === 'drums' ? (
               <span className="keys">
                 <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>.</kbd> dotted · <kbd>1-9</kbd> pads ·{' '}
-                <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>PgUp PgDn</kbd> row ·{' '}
+                <kbd>←→</kbd> cursor · <kbd>Shift ←→</kbd> extend selection · <kbd>↑↓</kbd> lane · <kbd>Alt ←→↑↓</kbd> move hits · <kbd>PgUp PgDn</kbd> row ·{' '}
                 <kbd>Space</kbd> play · <kbd>Del</kbd> delete
               </span>
             ) : (
               <span className="keys">
                 <kbd>W H Q E S [ ]</kbd> note value · <kbd>T</kbd> triplet · <kbd>.</kbd> dotted · <kbd>0-9</kbd> type
-                fret · <kbd>←→</kbd> cursor · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± · <kbd>Alt ←→↑↓</kbd>{' '}
+                fret · <kbd>←→</kbd> cursor · <kbd>Shift ←→</kbd> extend selection · <kbd>↑↓</kbd> string · <kbd>Shift ↑↓</kbd> fret ± · <kbd>Alt ←→↑↓</kbd>{' '}
                 move notes · <kbd>P</kbd> palm mute · <kbd>PgUp PgDn</kbd> row · <kbd>Space</kbd> play · <kbd>Del</kbd>{' '}
                 delete
               </span>

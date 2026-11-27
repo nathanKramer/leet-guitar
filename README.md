@@ -58,7 +58,7 @@ npm run build
   the one you just entered; if they end at the cursor, the cursor moves with them. Press `Esc` first to change the
   value for the next note only.
 - **Typing frets**: `0`–`9` enters a fret on the cursor string; two digits in quick succession make fret 10+.
-- `←/→` step the cursor and select (and hear) the note or chord that starts there · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
+- `←/→` step the cursor and select (and hear) the note or chord that starts there · `Shift+←/→` grow (or shrink) the selection from where you started, taking in every note the cursor passes over · `↑/↓` cursor string · `Shift+↑/↓` fret ±1 · `Alt+←/→` move notes in time ·
   `Alt+↑/↓` move notes to the adjacent string at the same pitch · `Space` play · `Del` delete (deleting one note selects the one before it) ·
   `Ctrl+Z / Ctrl+Shift+Z` undo/redo · `Ctrl+A/C/X/V` select all, copy, cut, paste at the cursor.
 - **Palm muting**: `P` (or **P.M.** in the toolbar) palm mutes the selected guitar or bass notes, or unmutes them if
