@@ -1,4 +1,5 @@
-import type { Song, Track } from '../model/types';
+import type { ID, Song, Track } from '../model/types';
+import type { Spread } from './spread';
 
 /**
  * Something that turns notes into sound. The Player owns timing (what to play when);
@@ -11,8 +12,11 @@ export interface SoundEngine {
   playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute?: boolean): void;
   /** Sound a note right away (placing notes, hitting pads). */
   preview(song: Song, track: Track, pitch: number, palmMute?: boolean): void;
-  /** Apply each track's mix settings (pan). Called whenever the song changes, so it takes effect during playback. */
-  mix(song: Song): void;
+  /**
+   * Apply each track's mix settings: pan, and the detune in `spread` (the Player applies its delay).
+   * Called whenever the song changes, so it takes effect during playback.
+   */
+  mix(song: Song, spread: Map<ID, Spread>): void;
   /** Silence everything now, including notes already scheduled. */
   stopAll(): void;
   dispose(): void;

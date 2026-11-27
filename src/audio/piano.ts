@@ -9,9 +9,16 @@ const RELEASE_S = 0.12;
 const LEVEL = 0.25;
 
 export class PianoSynth {
-  play(midi: number, when: number, duration: number, velocity: number, dest: AudioNode): AudioScheduledSourceNode[] {
+  play(
+    midi: number,
+    when: number,
+    duration: number,
+    velocity: number,
+    dest: AudioNode,
+    cents = 0,
+  ): AudioScheduledSourceNode[] {
     const { ctx } = audio();
-    const f0 = midiToFrequency(midi);
+    const f0 = midiToFrequency(midi) * Math.pow(2, cents / 1200);
     const vel = Math.max(0.05, velocity / 127);
     // Low notes ring for seconds, high notes die away quickly.
     const decay = Math.min(4, Math.max(0.35, 3 * Math.pow(0.5, (midi - 48) / 20)));

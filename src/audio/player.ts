@@ -6,6 +6,7 @@ import { audio } from './context';
 import type { SoundEngine } from './engine';
 import { meter } from '../model/meter';
 import { countInClicks, scheduleClicks } from './metronome';
+import { NO_SPREAD, trackSpread, type Spread } from './spread';
 
 /** How far ahead notes are handed to the engine, and how often the scheduler runs. */
 export const LOOKAHEAD_S = 0.2;
@@ -34,6 +35,7 @@ export class Player {
   private cancelClicks: (() => void) | undefined;
   /** The song last mixed, so a newly selected engine starts with the same mix. */
   private song: Song | undefined;
+  private spread = new Map<ID, Spread>();
 
   constructor(engine: SoundEngine) {
     this.engine = engine;
@@ -44,13 +46,14 @@ export class Player {
     if (engine === this.engine) return;
     this.stop();
     this.engine = engine;
-    if (this.song) engine.mix(this.song);
+    if (this.song) engine.mix(this.song, this.spread);
   }
 
   /** Keep the engine's mix (pan) in step with the song, including during playback. */
   mix(song: Song) {
     this.song = song;
-    this.engine.mix(song);
+    this.spread = trackSpread(song);
+    this.engine.mix(song, this.spread);
   }
 
   preview(song: Song, trackId: ID, pitch: number, palmMute = false) {
@@ -100,7 +103,7 @@ export class Player {
         engine.playNote(
           track,
           notePitch(track, n),
-          t0 + (n.start - fromTick) * secondsPerTick,
+          t0 + (n.start - fromTick) * secondsPerTick + (this.spread.get(n.trackId) ?? NO_SPREAD).delay,
           seconds,
           velocity,
           !!n.palmMute,

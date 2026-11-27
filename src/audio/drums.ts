@@ -91,7 +91,8 @@ export class DrumSynth {
       const n = ctx.createBufferSource();
       n.buffer = this.noiseBuffer(ctx);
       n.connect(dest);
-      n.start(when);
+      // Start somewhere random in the noise, so hits on two drum tracks at once aren't identical.
+      n.start(when, Math.random() * (n.buffer.duration - (stopAt - when)));
       n.stop(stopAt);
       out.push(n);
       return n;

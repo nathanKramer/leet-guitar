@@ -5,6 +5,7 @@ import { audio } from './context';
 import { DrumSynth } from './drums';
 import { PianoSynth } from './piano';
 import type { SoundEngine } from './engine';
+import type { Spread } from './spread';
 
 /**
  * How many times the initial noise burst is smoothed. More smoothing removes high harmonics
@@ -20,8 +21,9 @@ const MUTED_DECAY_S = 0.3;
 class PluckSynth {
   private cache = new Map<string, { buffer: AudioBuffer; rate: number }>();
 
-  private voice(midi: number, tone: 'guitar' | 'bass', muted: boolean) {
-    const key = `${tone}:${midi}:${muted ? 'pm' : ''}`;
+  /** `take` keys the cache: each panned track renders its own noise bursts, so doubled parts don't sound identical. */
+  private voice(midi: number, tone: 'guitar' | 'bass', muted: boolean, take: string) {
+    const key = `${take}:${tone}:${midi}:${muted ? 'pm' : ''}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
     const { ctx } = audio();
@@ -77,12 +79,13 @@ class PluckSynth {
     velocity = 96,
     tone: 'guitar' | 'bass' = 'guitar',
     muted = false,
+    spread?: { take: string; cents: number },
   ): AudioScheduledSourceNode[] {
     const { ctx } = audio();
-    const { buffer, rate } = this.voice(midi, tone, muted);
+    const { buffer, rate } = this.voice(midi, tone, muted, spread?.take ?? '');
     const src = ctx.createBufferSource();
     src.buffer = buffer;
-    src.playbackRate.value = rate;
+    src.playbackRate.value = rate * Math.pow(2, (spread?.cents ?? 0) / 1200);
     const gain = ctx.createGain();
     const level = (velocity / 127) * 0.9;
     const release = 0.05;
@@ -105,6 +108,7 @@ export class BuiltInEngine implements SoundEngine {
   private panners = new Map<ID, StereoPannerNode>();
   /** The song last mixed: its pans are newer than those of the copy playback started with. */
   private mixed: Song | undefined;
+  private spread = new Map<ID, Spread>();
 
   prepare(_song: Song) {
     this.drums.resetChoke();
@@ -122,8 +126,9 @@ export class BuiltInEngine implements SoundEngine {
     return p;
   }
 
-  mix(song: Song) {
+  mix(song: Song, spread: Map<ID, Spread>) {
     this.mixed = song;
+    this.spread = spread;
     for (const [id, p] of this.panners) {
       const track = song.tracks[id];
       if (!track) {
@@ -138,12 +143,22 @@ export class BuiltInEngine implements SoundEngine {
 
   playNote(track: Track, pitch: number, when: number, duration: number, velocity: number, palmMute = false) {
     const dest = this.bus(track);
+    const spread = this.spread.get(track.id);
     const nodes =
       track.kind === 'drums'
         ? this.drums.play(pitch, when, velocity, dest)
         : track.kind === 'piano'
-          ? this.piano.play(pitch, when, duration, velocity, dest)
-          : this.strings.play(dest, pitch, when, duration, velocity, track.kind, palmMute);
+          ? this.piano.play(pitch, when, duration, velocity, dest, spread?.cents)
+          : this.strings.play(
+              dest,
+              pitch,
+              when,
+              duration,
+              velocity,
+              track.kind,
+              palmMute,
+              spread && { take: track.id, cents: spread.cents },
+            );
     for (const n of nodes) {
       this.sources.add(n);
       n.addEventListener('ended', () => this.sources.delete(n));

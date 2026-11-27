@@ -89,7 +89,10 @@ npm run build
   mid-playback; **×** deletes it along with its notes (undoable).
 - **Pan**: the selected track's **Pan** slider places it between the left and right speakers (double-click to
   centre). Pan is part of the song: it syncs to collaborators, is saved in project files, takes effect during
-  playback with either sound engine, and is exported to MIDI as CC 10.
+  playback with either sound engine, and is exported to MIDI as CC 10. Identical parts panned apart would be
+  heard as one sound in the centre, so in playback each panned track is played slightly differently, like a
+  separate take: a few milliseconds later, a few cents off, and (with the built-in synth) with its own pluck.
+  MIDI export is left exact.
 - **Tunings**: the tuning button on the selected guitar or bass track (e.g. **E Std**) opens presets — 6-string
   (Standard, E♭/D/C/B Standard, Drop D/C/B, DADGAD, Open G, Open D), 7-string (Standard B, Drop A, A Standard) and
   bass (Standard, Drop D, D Standard, 5-string B) — or set each string a semitone at a time and add or remove a low

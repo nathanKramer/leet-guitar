@@ -16,6 +16,7 @@ import { GM_PROGRAM_NAMES, type Instrument } from '../model/gm';
 import type { ID, Song, Track } from '../model/types';
 import { audio } from './context';
 import type { SoundEngine } from './engine';
+import type { Spread } from './spread';
 import { LOOKAHEAD_S } from './player';
 
 const workletLoaded = new WeakSet<BaseAudioContext>();
@@ -30,6 +31,8 @@ export class SoundFontEngine implements SoundEngine {
   private muteChannels = new Map<ID, number>();
   /** Pan (MIDI CC 10) last sent on each channel. */
   private sentPan = new Map<number, number>();
+  /** Pitch wheel (detune) last sent on each channel. */
+  private sentBend = new Map<number, number>();
   /**
    * The synth schedules events against its own clock, which runs a constant amount
    * behind the AudioContext's (~200 ms in Chromium, set when the worklet starts).
@@ -37,6 +40,7 @@ export class SoundFontEngine implements SoundEngine {
    * it sends back, and add it to every scheduled time.
    */
   private clockOffset = 0;
+  private spread = new Map<ID, Spread>();
   private offsetSamples: number[] = [];
   private unmuteTimer: ReturnType<typeof setTimeout> | undefined;
   /** performance.now() until which events queued by the last playback may still fire. */
@@ -118,17 +122,29 @@ export class SoundFontEngine implements SoundEngine {
     this.muteChannels = palmMuteChannels(song);
     for (const [id, ch] of this.muteChannels) this.setInstrument(ch, song.tracks[id], MUTED_GUITAR_PROGRAM, 0);
     this.sentPan.clear();
-    this.mix(song);
+    this.sentBend.clear();
+    this.mix(song, this.spread);
     await this.syncClock();
   }
 
-  /** Pan each track's channels (its palm-mute channel too). Only changed values are sent. */
-  mix(song: Song) {
+  /**
+   * Pan and detune each track's channels (its palm-mute channel too). Only changed values are sent.
+   * Detune uses the pitch wheel at its default range of ±2 semitones (8192 is centre, 4096 per semitone).
+   */
+  mix(song: Song, spread: Map<ID, Spread>) {
+    this.spread = spread;
     const send = (ch: number, track: Track) => {
       const value = panValue(track.pan);
-      if (this.sentPan.get(ch) === value) return;
-      this.synth.controllerChange(ch, 10, value);
-      this.sentPan.set(ch, value);
+      if (this.sentPan.get(ch) !== value) {
+        this.synth.controllerChange(ch, 10, value);
+        this.sentPan.set(ch, value);
+      }
+      if (track.kind === 'drums') return;
+      const bend = Math.round(8192 + ((spread.get(track.id)?.cents ?? 0) / 100) * 4096);
+      if (this.sentBend.get(ch) !== bend) {
+        this.synth.pitchWheel(ch, bend);
+        this.sentBend.set(ch, bend);
+      }
     };
     for (const [id, ch] of trackChannels(song)) send(ch, song.tracks[id]);
     for (const [id, ch] of palmMuteChannels(song)) send(ch, song.tracks[id]);
