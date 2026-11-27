@@ -8,6 +8,7 @@ import { trackKindFor, type Instrument } from '../model/gm';
 import type { Clip } from '../model/transfer';
 import type { ID, TimeSig, TrackKind } from '../model/types';
 import { BARS_PER_ROW, type EditorState } from './editorStore';
+import { rowLayout } from './rows';
 import { docStore, editor, player, saveCountIn } from '../session';
 
 let clipboard: Clip | null = null;
@@ -86,7 +87,16 @@ export function moveCursorBars(bars: number) {
 }
 
 /** PgUp/PgDn: one timeline row (a few bars) later or earlier. */
-export const moveCursorRow = (dir: 1 | -1) => moveCursorBars(dir * ed().barsPerRow);
+export function moveCursorRow(dir: 1 | -1) {
+  const { barsPerRow, cursor } = ed();
+  if (barsPerRow >= 1) return moveCursorBars(dir * barsPerRow);
+  // Below a bar per row, keep the cursor's place within its row as it moves to the next or previous row.
+  const rows = rowLayout(meter(song()), barsPerRow);
+  const r = rows.of(cursor);
+  const target = Math.max(0, r + dir);
+  const offset = Math.min(cursor - rows.start(r), rows.end(target) - rows.start(target) - 1);
+  editor.set({ cursor: rows.start(target) + offset });
+}
 
 /**
  * Set the time signature from the cursor's bar: up to the next change, or with `last`, for bars up to `last` only
@@ -144,7 +154,7 @@ export function stepCursor(dir: 1 | -1) {
 export function stepBarsPerRow(dir: 1 | -1) {
   editor.set((s) => {
     const i = BARS_PER_ROW.indexOf(s.barsPerRow);
-    const next = BARS_PER_ROW[Math.min(BARS_PER_ROW.length - 1, Math.max(0, (i < 0 ? 2 : i) + dir))];
+    const next = BARS_PER_ROW[Math.min(BARS_PER_ROW.length - 1, Math.max(0, (i < 0 ? BARS_PER_ROW.indexOf(4) : i) + dir))];
     return { barsPerRow: next };
   });
 }

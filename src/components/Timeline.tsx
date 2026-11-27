@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
+import { rowLayout } from '../editor/rows';
 import { audition, placeNote, previewNote, shiftSelection, stepTicks } from '../editor/actions';
 import { describeDuration } from '../model/durations';
 import { meter, sigLabel } from '../model/meter';
@@ -82,12 +83,13 @@ export function Timeline({ song, ed, peers }: Props) {
   const lastEnd = notes.reduce((mx, n) => Math.max(mx, n.start + n.duration), 0);
   // Room after the last note (and the cursor) to keep writing, rounded up to whole rows.
   const bars = Math.max(8, m.barAt(Math.max(lastEnd, ed.cursor + step) - 1) + 2);
-  const rows = Math.max(1, Math.ceil(bars / bpr));
+  const layout = rowLayout(m, bpr);
+  const rows = Math.max(1, layout.count(bars));
   const gutter = GUTTER[track?.kind ?? 'guitar'];
   const width = Math.max(200, ed.rowWidth);
-  /** Where a row starts and ends, in ticks. Rows hold the same number of bars, but bars can differ in length. */
-  const rowStart = (r: number) => m.barStart(r * bpr);
-  const rowEnd = (r: number) => m.barStart((r + 1) * bpr);
+  /** Where a row starts and ends, in ticks. Rows hold the same share of bars, but bars can differ in length. */
+  const rowStart = layout.start;
+  const rowEnd = layout.end;
   /** Pixels per tick in a row: each row stretches across the timeline. */
   const pptOf = (r: number) => (width - gutter - RIGHT_PAD) / (rowEnd(r) - rowStart(r));
   const piano = track?.kind === 'piano';
@@ -129,7 +131,7 @@ export function Timeline({ song, ed, peers }: Props) {
   const stride = rowBody + ROW_GAP;
   const height = rows * stride - ROW_GAP;
   const rowTop = (r: number) => r * stride;
-  const rowOf = (tick: number) => Math.floor(m.barAt(tick) / bpr);
+  const rowOf = layout.of;
   /** x of a tick within row `r`. */
   const xIn = (r: number, tick: number) => gutter + (tick - rowStart(r)) * pptOf(r);
   /** Where a tick sits: its row and x within that row. */
@@ -378,17 +380,25 @@ export function Timeline({ song, ed, peers }: Props) {
         className={isBar ? 'tl-bar' : 'tl-beat'}
       />
     );
-    // Each bar has its own grid, measured from its start (bars can differ in length).
-    for (let b = r * bpr; b < (r + 1) * bpr; b++) {
+    // Each bar has its own grid, measured from its start (bars can differ in length). Below one bar per row, a row
+    // holds only part of a bar, so only that part's lines are drawn.
+    const from = rowStart(r);
+    const to = rowEnd(r);
+    const inRow = (tick: number) => tick >= from && tick < to;
+    const firstBar = m.barAt(from);
+    const lastBar = m.barAt(to - 1);
+    for (let b = firstBar; b <= lastBar; b++) {
       const start = m.barStart(b);
       const len = m.barLength(b);
       const beat = m.beatTicks(b);
       for (let t = step; t < len; t += step) {
-        if (t % beat === 0) continue;
+        if (t % beat === 0 || !inRow(start + t)) continue;
         const x = xIn(r, start + t);
         lines.push(<line key={`g${b}:${t}`} x1={x} x2={x} y1={top + RULER_H} y2={top + rowBody} className="tl-grid" />);
       }
-      for (let t = 0; t < len; t += beat) lines.push(barLines(xIn(r, start + t), `b${b}:${t}`, t === 0));
+      for (let t = 0; t < len; t += beat) {
+        if (inRow(start + t)) lines.push(barLines(xIn(r, start + t), `b${b}:${t}`, t === 0));
+      }
     }
     lines.push(barLines(right, 'end', true));
     const labelX = isDrums ? 10 : piano ? gutter - 6 : gutter / 2;
@@ -396,13 +406,17 @@ export function Timeline({ song, ed, peers }: Props) {
       <g key={r} className="tl-row">
         <rect x={0} y={top} width={width} height={rowBody} className="tl-row-bg" />
         <rect x={gutter} y={top} width={right - gutter} height={RULER_H} className="tl-ruler" />
-        {Array.from({ length: bpr }, (_, i) => {
-          const b = r * bpr + i;
-          const x = xIn(r, m.barStart(b));
+        {Array.from({ length: lastBar - firstBar + 1 }, (_, i) => {
+          const b = firstBar + i;
+          const barStart = m.barStart(b);
+          // A row that starts partway through a bar still names the bar, with which beat it picks up from.
+          const partial = barStart < from;
+          const x = xIn(r, Math.max(barStart, from));
           return (
             <text key={i} x={x + 5} y={top + 15} className="tl-barnum">
               {b + 1}
-              {m.changesAt(b) && <tspan className="tl-timesig">{` ${sigLabel(m.sigAt(b))}`}</tspan>}
+              {partial && <tspan className="tl-timesig">{` beat ${Math.floor((from - barStart) / m.beatTicks(b)) + 1}`}</tspan>}
+              {!partial && m.changesAt(b) && <tspan className="tl-timesig">{` ${sigLabel(m.sigAt(b))}`}</tspan>}
             </text>
           );
         })}

@@ -48,9 +48,11 @@ function CommitInput(props: {
         setDraft(v);
         // Spinner clicks and arrow keys on a number input step the value without
         // focusing or blurring it, so commit those right away. Typing produces an
-        // InputEvent with an inputType like 'insertText'; stepping does not.
+        // InputEvent with an inputType like 'insertText'. Stepping has no inputType in
+        // Chrome, and 'insertReplacementText' in Firefox.
         const inputType = (e.nativeEvent as InputEvent).inputType;
-        if (props.type === 'number' && !inputType && v !== props.value) props.onCommit(v);
+        const stepped = !inputType || inputType === 'insertReplacementText';
+        if (props.type === 'number' && stepped && v !== props.value) props.onCommit(v);
       }}
       onBlur={() => draft !== props.value && props.onCommit(draft)}
       onKeyDown={(e) => {
@@ -161,7 +163,7 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
           −
         </button>
         <span className="muted bars-per-row" title="Bars per timeline row">
-          {ed.barsPerRow} {ed.barsPerRow === 1 ? 'bar' : 'bars'}/row
+          {barsLabel(ed.barsPerRow)}/row
         </span>
         <button onClick={() => act.stepBarsPerRow(-1)} title="Zoom in: fewer bars per row">
           +
@@ -284,4 +286,10 @@ function SoundControl() {
       )}
     </div>
   );
+}
+
+/** "4 bars", "1 bar", "½ bar", "¼ bar". */
+function barsLabel(n: number) {
+  const fraction: Record<number, string> = { 0.5: '½', 0.25: '¼' };
+  return n >= 1 ? `${n} ${n === 1 ? 'bar' : 'bars'}` : `${fraction[n] ?? n} bar`;
 }

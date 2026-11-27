@@ -15,7 +15,7 @@ export interface ArrangeSelection {
 }
 
 /** Row lengths the timeline can be set to (zoom in = fewer bars per row). */
-export const BARS_PER_ROW = [1, 2, 4, 8];
+export const BARS_PER_ROW = [0.25, 0.5, 1, 2, 4, 8];
 
 /** Local, per-user UI state. Never synced or persisted with the document. */
 export interface EditorState {
