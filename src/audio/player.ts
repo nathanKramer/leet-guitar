@@ -4,6 +4,7 @@ import { notePitch } from '../model/drums';
 import type { ID, Note, Song } from '../model/types';
 import { audio } from './context';
 import type { SoundEngine } from './engine';
+import { meter } from '../model/meter';
 import { countInClicks, scheduleClicks } from './metronome';
 
 /** How far ahead notes are handed to the engine, and how often the scheduler runs. */
@@ -68,7 +69,9 @@ export class Player {
     const bpm = song.meta.bpm;
     const secondsPerTick = ticksToSeconds(1, bpm);
     const start = ctx.currentTime + 0.08;
-    const count = countIn ? countInClicks(song.meta) : null;
+    // Count in with the time signature of the bar playback starts in.
+    const m = meter(song);
+    const count = countIn ? countInClicks({ ...song.meta, ...m.sigAt(m.barAt(fromTick)) }) : null;
     if (count) this.cancelClicks = scheduleClicks(count.clicks, start);
     const t0 = start + (count?.seconds ?? 0);
     const notes = Object.values(song.notes)

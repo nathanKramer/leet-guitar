@@ -9,7 +9,7 @@ import {
   type Op,
   type StampedOp,
 } from './crdt';
-import { DEFAULT_META, materialize, META_ID, readMeta, readNote, readPattern, readTrack } from './materialize';
+import { DEFAULT_META, materialize, META_ID, readMeta, readNote, readPattern, readTimeSig, readTrack } from './materialize';
 import type { ID, Song } from './types';
 
 type Listener = () => void;
@@ -166,7 +166,8 @@ export class DocumentStore {
   /** Re-materialize only the touched records, keeping referential identity elsewhere. */
   private refresh(touched: Array<[Collection, ID]>): void {
     if (touched.length === 0) return;
-    let { meta, tracks, notes, patterns } = this.song;
+    let { meta, tracks, notes, patterns, timeSigs } = this.song;
+    let timeSigsCopied = false;
     let tracksCopied = false;
     let notesCopied = false;
     let patternsCopied = false;
@@ -178,6 +179,11 @@ export class DocumentStore {
         const t = readTrack(id, this.state.tracks[id]);
         if (t) tracks[id] = t;
         else delete tracks[id];
+      } else if (coll === 'timeSigs') {
+        if (!timeSigsCopied) (timeSigs = { ...timeSigs }), (timeSigsCopied = true);
+        const t = readTimeSig(this.state.timeSigs[id]);
+        if (t) timeSigs[id] = t;
+        else delete timeSigs[id];
       } else if (coll === 'patterns') {
         if (!patternsCopied) (patterns = { ...patterns }), (patternsCopied = true);
         const p = readPattern(id, this.state.patterns[id]);
@@ -190,7 +196,7 @@ export class DocumentStore {
         else delete notes[id];
       }
     }
-    this.song = { meta, tracks, notes, patterns };
+    this.song = { meta, tracks, notes, patterns, timeSigs };
     this.listeners.forEach((fn) => fn());
   }
 }

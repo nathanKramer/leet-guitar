@@ -15,6 +15,7 @@ const song: Song = {
     b: { id: 'b', trackId: DEFAULT_TRACK_ID, string: 0, fret: 3, start: 160, duration: 160, velocity: 100 },
   },
   patterns: {},
+  timeSigs: {},
 };
 
 describe('vlq', () => {

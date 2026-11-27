@@ -7,9 +7,10 @@
  */
 import { ZERO_STAMP, type Op } from './crdt';
 import { newId } from './id';
-import { DEFAULT_META, META_ID, readPattern } from './materialize';
+import { BEAT_UNITS, DEFAULT_META, MAX_BEATS_PER_BAR, META_ID, readPattern, readTimeSig } from './materialize';
+import { timeSigId } from './meter';
 import { newTrack, sortedPatterns, sortedTracks } from './commands';
-import type { ID, Note, Pattern, Song, SongMeta, Track, TrackKind } from './types';
+import type { ID, Note, Pattern, Song, SongMeta, TimeSigChange, Track, TrackKind } from './types';
 
 export const PROJECT_FORMAT = 'leet-guitar';
 export const PROJECT_VERSION = 1;
@@ -23,6 +24,8 @@ export interface ProjectFile {
   notes: Note[];
   /** Saved patterns (absent in files from before patterns existed). */
   patterns?: Pattern[];
+  /** Time signature changes after the first bar (absent if there are none). */
+  timeSigs?: TimeSigChange[];
 }
 
 export function serializeProject(song: Song): string {
@@ -32,6 +35,7 @@ export function serializeProject(song: Song): string {
     .filter((n) => order.has(n.trackId))
     .sort((a, b) => order.get(a.trackId)! - order.get(b.trackId)! || a.start - b.start || a.string - b.string);
   const patterns = sortedPatterns(song);
+  const timeSigs = Object.values(song.timeSigs).sort((a, b) => a.bar - b.bar);
   const file: ProjectFile = {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
@@ -39,10 +43,11 @@ export function serializeProject(song: Song): string {
     tracks,
     notes,
     ...(patterns.length && { patterns }),
+    ...(timeSigs.length && { timeSigs }),
   };
   // One note per line: readable, and diffs well under version control.
   return JSON.stringify(file, null, 2)
-    .replace(/\{\s+("(?:id|pitch)": [^{}\[\]]*?)\s+\}/g, (_, body: string) => `{ ${body.replace(/,\s+/g, ', ')} }`)
+    .replace(/\{\s+("(?:id|pitch|bar)": [^{}\[\]]*?)\s+\}/g, (_, body: string) => `{ ${body.replace(/,\s+/g, ', ')} }`)
     .replace(/\[\s+([\d,\s]+?)\s+\]/g, (_, nums: string) => `[${nums.replace(/,\s+/g, ', ')}]`);
 }
 
@@ -51,6 +56,7 @@ export interface ParsedProject {
   tracks: Track[];
   notes: Note[];
   patterns: Pattern[];
+  timeSigs: TimeSigChange[];
   /** Notes left out because they were malformed or referred to a missing track or string. */
   skipped: number;
 }
@@ -77,8 +83,8 @@ export function parseProject(text: string): ParsedProject {
   const meta: SongMeta = {
     title: typeof m.title === 'string' ? m.title : DEFAULT_META.title,
     bpm: isInt(m.bpm, 20, 400) ? m.bpm : DEFAULT_META.bpm,
-    beatsPerBar: isInt(m.beatsPerBar, 1, 32) ? m.beatsPerBar : DEFAULT_META.beatsPerBar,
-    beatUnit: [2, 4, 8, 16].includes(m.beatUnit as number) ? (m.beatUnit as number) : DEFAULT_META.beatUnit,
+    beatsPerBar: isInt(m.beatsPerBar, 1, MAX_BEATS_PER_BAR) ? m.beatsPerBar : DEFAULT_META.beatsPerBar,
+    beatUnit: BEAT_UNITS.includes(m.beatUnit as number) ? (m.beatUnit as number) : DEFAULT_META.beatUnit,
   };
 
   const tracks: Track[] = [];
@@ -130,7 +136,12 @@ export function parseProject(text: string): ParsedProject {
     });
     if (pattern) patterns.push(pattern);
   }
-  return { meta, tracks, notes, patterns, skipped: rawNotes.length - notes.length };
+  const timeSigs: TimeSigChange[] = [];
+  for (const t of Array.isArray(data.timeSigs) ? data.timeSigs : []) {
+    const sig = isObj(t) && readTimeSig({ fields: t, stamps: {}, alive: true, aliveStamp: ZERO_STAMP });
+    if (sig && !timeSigs.some((x) => x.bar === sig.bar)) timeSigs.push(sig);
+  }
+  return { meta, tracks, notes, patterns, timeSigs, skipped: rawNotes.length - notes.length };
 }
 
 /**
@@ -153,12 +164,14 @@ export function openProjectOps(song: Song, project: ParsedProject): { ops: Op[];
   for (const { id: _id, ...fields } of project.patterns) {
     ops.push({ t: 'put', coll: 'patterns', id: newId(), value: { ...fields } });
   }
+  for (const t of project.timeSigs) ops.push({ t: 'put', coll: 'timeSigs', id: timeSigId(t.bar), value: { ...t } });
   return { ops, firstTrackId: trackIds.get(project.tracks[0].id)! };
 }
 
-/** Ops that delete every track, note and pattern in `song`. */
+/** Ops that delete every track, note, pattern and time signature change in `song`. */
 function clearOps(song: Song): Op[] {
   return [
+    ...Object.keys(song.timeSigs).map((id): Op => ({ t: 'del', coll: 'timeSigs', id })),
     ...Object.keys(song.patterns).map((id): Op => ({ t: 'del', coll: 'patterns', id })),
     ...Object.keys(song.notes).map((id): Op => ({ t: 'del', coll: 'notes', id })),
     ...Object.keys(song.tracks).map((id): Op => ({ t: 'del', coll: 'tracks', id })),

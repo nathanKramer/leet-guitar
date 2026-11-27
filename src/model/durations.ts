@@ -1,4 +1,4 @@
-import type { SongMeta } from './types';
+import type { TimeSig } from './types';
 
 /**
  * Ticks per quarter note. 480 divides cleanly by 3 at every subdivision we
@@ -74,12 +74,8 @@ export function describeNoteValue({ base, triplet, dotted }: NoteValue): string 
   return `${dotted ? 'dotted ' : ''}${DURATION_NAMES[base]}${triplet ? ' triplet' : ''}`;
 }
 
-export function beatTicks(meta: SongMeta): number {
+export function beatTicks(meta: TimeSig): number {
   return (PPQ * 4) / meta.beatUnit;
-}
-
-export function barTicks(meta: SongMeta): number {
-  return meta.beatsPerBar * beatTicks(meta);
 }
 
 export function ticksToSeconds(ticks: number, bpm: number): number {

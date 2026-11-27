@@ -1,7 +1,7 @@
 /** Turns raw CRDT entries into the typed Song view, with defaults and validation. */
 import type { DocState, Entry } from './crdt';
 import { STANDARD_TUNING } from './music';
-import type { ID, Note, Pattern, PatternNote, Song, SongMeta, Track, TrackKind } from './types';
+import type { ID, Note, Pattern, PatternNote, Song, SongMeta, TimeSigChange, Track, TrackKind } from './types';
 
 export const META_ID = 'song';
 
@@ -83,6 +83,20 @@ export function readPattern(id: ID, e: Entry | undefined): Pattern | null {
   return { id, name: str(f.name, 'Pattern'), kind: f.kind as TrackKind, tuning: f.tuning as number[], notes };
 }
 
+export const BEAT_UNITS = [2, 4, 8, 16];
+export const MAX_BEATS_PER_BAR = 32;
+
+export function readTimeSig(e: Entry | undefined): TimeSigChange | null {
+  if (!e?.alive) return null;
+  const { bar, beatsPerBar, beatUnit } = e.fields;
+  if (!Number.isInteger(bar) || (bar as number) < 1) return null;
+  if (!Number.isInteger(beatsPerBar) || (beatsPerBar as number) < 1 || (beatsPerBar as number) > MAX_BEATS_PER_BAR) {
+    return null;
+  }
+  if (!BEAT_UNITS.includes(beatUnit as number)) return null;
+  return { bar: bar as number, beatsPerBar: beatsPerBar as number, beatUnit: beatUnit as number };
+}
+
 export function materialize(state: DocState): Song {
   const tracks: Record<ID, Track> = {};
   for (const [id, e] of Object.entries(state.tracks)) {
@@ -99,5 +113,10 @@ export function materialize(state: DocState): Song {
     const p = readPattern(id, e);
     if (p) patterns[id] = p;
   }
-  return { meta: readMeta(state.meta[META_ID]), tracks, notes, patterns };
+  const timeSigs: Record<ID, TimeSigChange> = {};
+  for (const [id, e] of Object.entries(state.timeSigs ?? {})) {
+    const t = readTimeSig(e);
+    if (t) timeSigs[id] = t;
+  }
+  return { meta: readMeta(state.meta[META_ID]), tracks, notes, patterns, timeSigs };
 }

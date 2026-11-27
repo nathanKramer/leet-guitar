@@ -5,14 +5,18 @@
  * A note belongs to the bar it starts in and goes wherever that bar goes, keeping its length (so a note ringing
  * over a bar line keeps ringing into whatever bar now follows). Afterwards the one-note-per-lane rule is
  * applied: a note that would ring into the next note on its string, key or drum is cut short.
+ *
+ * Time signatures go with their bars too: a moved 7/8 bar is still 7/8 wherever it lands. A note keeps its place
+ * within its bar, so when a bar gets shorter (a new time signature, or a block pasted from a longer bar), notes
+ * that no longer fit in it are left out.
  */
 import type { Op } from './crdt';
-import { barTicks } from './durations';
 import { notePitch } from './drums';
 import { newId } from './id';
 import { isStringed } from './instruments';
+import { meter, Meter, timeSigOps } from './meter';
 import { placeClip, type Clip } from './transfer';
-import type { ID, Note, Song, Track } from './types';
+import type { ID, Note, Song, TimeSig, Track } from './types';
 
 /** A run of bars, numbered from 0: [first, first + count). */
 export interface BarRange {
@@ -20,7 +24,7 @@ export interface BarRange {
   count: number;
 }
 
-export const barOf = (song: Song, tick: number) => Math.floor(tick / barTicks(song.meta));
+export const barOf = (song: Song, tick: number) => meter(song).barAt(tick);
 
 /** Bars that hold a note (its start), counting from 0; 0 for an empty song. */
 export function usedBars(song: Song): number {
@@ -79,18 +83,47 @@ function commit(song: Song, result: Note[], added: Set<ID>): Op[] {
   return ops;
 }
 
+/** A bar-level edit: its ops and how many notes had to be left out because their bar got too short for them. */
+export interface BarEdit {
+  ops: Op[];
+  dropped: number;
+}
+
 /**
  * Rebuild the song's bars. `place` says which bars a note starting in bar `b` ends up in: none deletes it, one
- * moves it, several make copies (the original note goes to the first).
+ * moves it, several make copies (the original note goes to the first). Each bar's time signature goes with it;
+ * bars nothing lands in (inserted ones) continue the signature of the bar before. `resign`, if given, then
+ * changes the new bars' signatures (it gets them for bars 0..n-1, the last holding for every later bar).
+ * `reach` is the furthest bar `place` treats specially.
  */
-function rearrange(song: Song, place: (bar: number) => number[]): Op[] {
-  const bar = barTicks(song.meta);
+function rearrange(
+  song: Song,
+  place: (bar: number) => number[],
+  reach: number,
+  resign?: (sigs: TimeSig[]) => TimeSig[],
+): BarEdit {
+  const old = meter(song);
+  // Past `horizon`, bars hold no notes, share one signature and move as a block, so one of them stands for all.
+  const horizon = Math.max(usedBars(song), old.settledFrom, reach) + 1;
+  const sigs: (TimeSig | undefined)[] = [];
+  for (let b = 0; b <= horizon; b++) for (const t of place(b)) sigs[t] = old.sigAt(b);
+  for (let b = 0; b < sigs.length; b++) sigs[b] ??= b ? sigs[b - 1] : old.sigAt(0);
+  let newSigs = sigs as TimeSig[];
+  if (resign) newSigs = resign(newSigs);
+  const next = Meter.fromBars(newSigs);
+
   const result: Note[] = [];
   const added = new Set<ID>();
+  let dropped = 0;
   for (const n of Object.values(song.notes)) {
-    const b = Math.floor(n.start / bar);
+    const b = old.barAt(n.start);
+    const offset = n.start - old.barStart(b);
     place(b).forEach((target, i) => {
-      const start = n.start + (target - b) * bar;
+      if (offset >= next.barLength(target)) {
+        dropped++;
+        return;
+      }
+      const start = next.barStart(target) + offset;
       if (i === 0) {
         result.push({ ...n, start });
       } else {
@@ -100,7 +133,7 @@ function rearrange(song: Song, place: (bar: number) => number[]): Op[] {
       }
     });
   }
-  return commit(song, result, added);
+  return { ops: [...timeSigOps(song, newSigs), ...commit(song, result, added)], dropped };
 }
 
 /** Move `range` to just before bar `to`; the bars in between close up behind it. */
@@ -109,31 +142,56 @@ export function moveBars(song: Song, range: BarRange, to: number): Op[] {
   if (dest === null) return [];
   const { first, count } = range;
   const end = first + count;
-  return rearrange(song, (b) => {
-    if (b >= first && b < end) return [dest + (b - first)];
-    if (to < first && b >= to && b < first) return [b + count];
-    if (to > end && b >= end && b < to) return [b - count];
-    return [b];
-  });
+  return rearrange(
+    song,
+    (b) => {
+      if (b >= first && b < end) return [dest + (b - first)];
+      if (to < first && b >= to && b < first) return [b + count];
+      if (to > end && b >= end && b < to) return [b - count];
+      return [b];
+    },
+    Math.max(end, to),
+  ).ops;
 }
 
 /** Repeat `range` straight after itself, pushing later bars along. */
 export function duplicateBars(song: Song, range: BarRange): Op[] {
   const { first, count } = range;
   const end = first + count;
-  return rearrange(song, (b) => (b < first ? [b] : b < end ? [b, b + count] : [b + count]));
+  return rearrange(song, (b) => (b < first ? [b] : b < end ? [b, b + count] : [b + count]), end).ops;
 }
 
 /** Insert `count` empty bars before bar `at`. */
 export function insertBars(song: Song, at: number, count = 1): Op[] {
-  return rearrange(song, (b) => [b < at ? b : b + count]);
+  return rearrange(song, (b) => [b < at ? b : b + count], at).ops;
 }
 
 /** Delete the bars in `range` (in every track); later bars move back to fill the gap. */
 export function deleteBars(song: Song, range: BarRange): Op[] {
   const { first, count } = range;
   const end = first + count;
-  return rearrange(song, (b) => (b < first ? [b] : b < end ? [] : [b - count]));
+  return rearrange(song, (b) => (b < first ? [b] : b < end ? [] : [b - count]), end).ops;
+}
+
+/**
+ * Give bars a time signature: bars `first` to `last`, or with no `last`, from `first` up to the next change (or
+ * the end of the song). Bars after keep their own signature. Notes keep their place within their bar, so later
+ * bars move along with the change; notes that no longer fit in a shortened bar are left out.
+ */
+export function setTimeSig(song: Song, sig: TimeSig, first: number, last?: number): BarEdit {
+  const end = last === undefined ? meter(song).nextChange(first) : last + 1;
+  const finite = Number.isFinite(end);
+  return rearrange(
+    song,
+    (b) => [b],
+    finite ? end : first,
+    (sigs) => {
+      // The last entry stands for every later bar, so with no end it takes the new signature too.
+      const out = [...sigs];
+      for (let b = first; b < (finite ? end : out.length); b++) out[b] = sig;
+      return out;
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -158,13 +216,14 @@ export interface BlockClip {
 /** A block's notes as a clip, offsets measured from the start of its bar. */
 function blockClip(song: Song, block: Block): Clip {
   const track = song.tracks[block.trackId];
-  const bar = barTicks(song.meta);
-  const start = block.bar * bar;
+  const m = meter(song);
+  const start = m.barStart(block.bar);
+  const end = m.barStart(block.bar + 1);
   return {
     kind: track.kind,
     tuning: track.tuning,
     notes: Object.values(song.notes)
-      .filter((n) => n.trackId === block.trackId && n.start >= start && n.start < start + bar)
+      .filter((n) => n.trackId === block.trackId && n.start >= start && n.start < end)
       .map((n) => ({
         pitch: notePitch(track, n),
         string: n.string,
@@ -214,7 +273,7 @@ function writeBlocks(
   row = 0,
   bar = 0,
 ): BlockPaste {
-  const barLen = barTicks(song.meta);
+  const m = meter(song);
   const out: BlockPaste = { ops: [], blocks: [], refused: 0, octaveShifted: 0, dropped: 0 };
   const placed: Note[] = [];
   const empty = new Set(cleared.map(blockKey));
@@ -235,13 +294,19 @@ function writeBlocks(
     out.blocks.push(block);
     out.octaveShifted += placement.octaveShifted;
     out.dropped += placement.dropped;
+    const len = m.barLength(target);
     for (const c of placement.notes) {
+      // A block from a longer bar: what doesn't fit in this one is left out.
+      if (c.offset >= len) {
+        out.dropped++;
+        continue;
+      }
       placed.push({
         id: newId(),
         trackId: track.id,
         string: c.string,
         fret: c.fret,
-        start: target * barLen + c.offset,
+        start: m.barStart(target) + c.offset,
         duration: c.duration,
         velocity: c.velocity,
         ...(c.palmMute && isStringed(track.kind) && { palmMute: true }),
@@ -249,7 +314,7 @@ function writeBlocks(
     }
   }
   const keep = Object.values(song.notes)
-    .filter((n) => !empty.has(blockKey({ trackId: n.trackId, bar: Math.floor(n.start / barLen) })))
+    .filter((n) => !empty.has(blockKey({ trackId: n.trackId, bar: m.barAt(n.start) })))
     .map((n) => ({ ...n }));
   out.ops = commit(song, [...keep, ...placed], new Set(placed.map((n) => n.id)));
   return out;

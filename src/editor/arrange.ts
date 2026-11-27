@@ -6,8 +6,8 @@
 import * as arrange from '../model/arrange';
 import type { BarRange, Block, BlockClip, BlockPaste } from '../model/arrange';
 import { sortedTracks } from '../model/commands';
-import { barTicks } from '../model/durations';
 import { TRACK_KINDS } from '../model/instruments';
+import { meter } from '../model/meter';
 import type { ID } from '../model/types';
 import { docStore, editor } from '../session';
 import { notify } from './actions';
@@ -15,7 +15,7 @@ import type { ArrangeSelection } from './editorStore';
 
 const song = () => docStore.getSong();
 const tracks = () => sortedTracks(song());
-const barStart = (bar: number) => bar * barTicks(song().meta);
+const barStart = (bar: number) => meter(song()).barStart(bar);
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 let clipboard: BlockClip | null = null;
@@ -58,6 +58,16 @@ function spannedBars(blocks: Block[]): BarRange | null {
   if (!blocks.length) return null;
   const first = Math.min(...blocks.map((b) => b.bar));
   return { first, count: Math.max(...blocks.map((b) => b.bar)) - first + 1 };
+}
+
+/**
+ * The bars a time signature change applies to. In the arrangement, the bars the selection spans (later bars keep
+ * their own); otherwise the cursor's bar, up to the next change.
+ */
+export function timeSigBars(s = editor.get()): { first: number; last?: number } {
+  const span = s.view === 'arrange' ? spannedBars(selectedBlocks(s.arrSel)) : null;
+  if (span) return { first: span.first, last: span.first + span.count - 1 };
+  return { first: arrange.barOf(song(), s.cursor) };
 }
 
 /**

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorState } from '../editor/editorStore';
 import { audition, placeNote, previewNote, shiftSelection, stepTicks } from '../editor/actions';
-import { barTicks, beatTicks, describeDuration } from '../model/durations';
+import { describeDuration } from '../model/durations';
+import { meter, sigLabel } from '../model/meter';
 import { isCymbal, laneLabel } from '../model/drums';
 import { isStringed } from '../model/instruments';
 import { visibleLanes } from '../model/lanes';
@@ -35,6 +36,8 @@ interface Drag {
   ids: ID[];
   /** The note that was grabbed; it's auditioned as the pitch changes. */
   anchor: ID;
+  /** Pixels per tick in the row where the drag started. */
+  ppt: number;
   x0: number;
   y0: number;
   dx: number;
@@ -74,17 +77,19 @@ export function Timeline({ song, ed, peers }: Props) {
   );
 
   const step = stepTicks();
-  const bar = barTicks(song.meta);
-  const beat = beatTicks(song.meta);
-  const rowTicks = ed.barsPerRow * bar;
-  const lastEnd = notes.reduce((m, n) => Math.max(m, n.start + n.duration), 0);
+  const m = meter(song);
+  const bpr = ed.barsPerRow;
+  const lastEnd = notes.reduce((mx, n) => Math.max(mx, n.start + n.duration), 0);
   // Room after the last note (and the cursor) to keep writing, rounded up to whole rows.
-  const bars = Math.max(8, Math.ceil(Math.max(lastEnd, ed.cursor + step) / bar) + 1);
-  const rows = Math.max(1, Math.ceil(bars / ed.barsPerRow));
+  const bars = Math.max(8, m.barAt(Math.max(lastEnd, ed.cursor + step) - 1) + 2);
+  const rows = Math.max(1, Math.ceil(bars / bpr));
   const gutter = GUTTER[track?.kind ?? 'guitar'];
   const width = Math.max(200, ed.rowWidth);
-  /** Pixels per tick: each row stretches across the timeline. */
-  const ppt = (width - gutter - RIGHT_PAD) / rowTicks;
+  /** Where a row starts and ends, in ticks. Rows hold the same number of bars, but bars can differ in length. */
+  const rowStart = (r: number) => m.barStart(r * bpr);
+  const rowEnd = (r: number) => m.barStart((r + 1) * bpr);
+  /** Pixels per tick in a row: each row stretches across the timeline. */
+  const pptOf = (r: number) => (width - gutter - RIGHT_PAD) / (rowEnd(r) - rowStart(r));
   const piano = track?.kind === 'piano';
   const stringed = track ? isStringed(track.kind) : true;
   const rowH = piano ? PIANO_ROW_H : ROW_H;
@@ -96,7 +101,7 @@ export function Timeline({ song, ed, peers }: Props) {
    * and bass notes stay on their strings and the fret changes. Clamped so the group keeps its shape.
    */
   const dragShift = (d: Drag): NoteShift => {
-    const ticks = Math.round(d.dx / ppt / step) * step;
+    const ticks = Math.round(d.dx / d.ppt / step) * step;
     const up = -d.dy;
     const shift = stringed
       ? { ticks, lanes: 0, frets: dragSteps(up, FRET_DEAD_ZONE_PX, FRET_STEP_PX) }
@@ -124,11 +129,13 @@ export function Timeline({ song, ed, peers }: Props) {
   const stride = rowBody + ROW_GAP;
   const height = rows * stride - ROW_GAP;
   const rowTop = (r: number) => r * stride;
-  const rowOf = (tick: number) => Math.floor(tick / rowTicks);
+  const rowOf = (tick: number) => Math.floor(m.barAt(tick) / bpr);
+  /** x of a tick within row `r`. */
+  const xIn = (r: number, tick: number) => gutter + (tick - rowStart(r)) * pptOf(r);
   /** Where a tick sits: its row and x within that row. */
   const at = (tick: number) => {
     const r = rowOf(tick);
-    return { r, x: gutter + (tick - r * rowTicks) * ppt };
+    return { r, x: xIn(r, tick) };
   };
   const laneY = (r: number, lane: number) => rowTop(r) + lanesTop + (lane - laneStart) * rowH + rowH / 2;
   /**
@@ -140,11 +147,11 @@ export function Timeline({ song, ed, peers }: Props) {
     const end = start + n.duration;
     for (let t = start; t < end;) {
       const r = rowOf(t);
-      const segEnd = Math.min(end, (r + 1) * rowTicks);
+      const segEnd = Math.min(end, rowEnd(r));
       const first = t === start;
       const last = segEnd === end;
-      const x = gutter + (t - r * rowTicks) * ppt + (first ? 1 : 0);
-      let w = (segEnd - t) * ppt - (first ? 1 : 0) - (last ? 1 : 0);
+      const x = xIn(r, t) + (first ? 1 : 0);
+      let w = (segEnd - t) * pptOf(r) - (first ? 1 : 0) - (last ? 1 : 0);
       if (first && last) w = Math.max(w, piano ? 6 : 14);
       out.push({ r, x, w, y: laneY(r, lane) - chipH / 2, first, last });
       t = segEnd;
@@ -155,7 +162,7 @@ export function Timeline({ song, ed, peers }: Props) {
   const hit = (x: number, y: number) => {
     const r = Math.min(rows - 1, Math.max(0, Math.floor(y / stride)));
     const local = y - rowTop(r);
-    const tick = r * rowTicks + Math.min(rowTicks - 1, Math.max(0, (x - gutter) / ppt));
+    const tick = rowStart(r) + Math.min(rowEnd(r) - rowStart(r) - 1, Math.max(0, (x - gutter) / pptOf(r)));
     const lane = laneStart + Math.floor((local - lanesTop) / rowH);
     const onLane = local >= lanesTop && local < rowBody - PAD && inView(lane);
     return { r, tick, lane: onLane ? lane : null };
@@ -213,7 +220,7 @@ export function Timeline({ song, ed, peers }: Props) {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [drag !== null, ppt, step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [drag !== null, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Measure the timeline so rows can fill its width.
   useEffect(() => {
@@ -257,7 +264,7 @@ export function Timeline({ song, ed, peers }: Props) {
     };
     const { x, y } = toSvg(e);
     const h = hit(x, y);
-    const tick = Math.max(0, Math.floor(h.tick / step) * step);
+    const tick = m.snap(h.tick, step);
     const s = h.lane;
     const base = e.shiftKey ? editor.get().selection : [];
     editor.set((st) => ({
@@ -306,7 +313,9 @@ export function Timeline({ song, ed, peers }: Props) {
     // Selecting a note puts the cursor on it, so the fretboard / keyboard shows it.
     editor.set(selection.includes(id) ? { selection, cursor: n.start, cursorString: n.string } : { selection });
     if (selection.includes(id)) previewNote(id);
-    if (selection.includes(id)) setDrag({ ids: selection, anchor: id, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 });
+    if (selection.includes(id)) {
+      setDrag({ ids: selection, anchor: id, ppt: pptOf(rowOf(n.start)), x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 });
+    }
   };
 
   /**
@@ -327,8 +336,8 @@ export function Timeline({ song, ed, peers }: Props) {
       const y = ev.clientY - rect.top;
       // Past the right edge of a row means the end of that row (the start of the next).
       const r = Math.min(rows - 1, Math.max(0, Math.floor(y / stride)));
-      const tick = r * rowTicks + Math.min(rowTicks, Math.max(0, (x - gutter) / ppt));
-      return Math.round(tick / step) * step;
+      const tick = rowStart(r) + Math.min(rowEnd(r) - rowStart(r), Math.max(0, (x - gutter) / pptOf(r)));
+      return tick >= rowEnd(r) ? rowEnd(r) : m.round(tick, step);
     };
     let current: Resize = { ids, anchor: id, end: n.start + n.duration };
     setResize(current);
@@ -359,35 +368,44 @@ export function Timeline({ song, ed, peers }: Props) {
     const top = rowTop(r);
     const right = width - RIGHT_PAD;
     const lines: JSX.Element[] = [];
-    for (let t = 0; t <= rowTicks; t += step) {
-      if (t % beat === 0) continue;
-      const x = gutter + t * ppt;
-      lines.push(<line key={`g${t}`} x1={x} x2={x} y1={top + RULER_H} y2={top + rowBody} className="tl-grid" />);
+    const barLines = (x: number, key: string, isBar: boolean) => (
+      <line
+        key={key}
+        x1={x}
+        x2={x}
+        y1={isBar ? top : top + RULER_H - 6}
+        y2={top + rowBody}
+        className={isBar ? 'tl-bar' : 'tl-beat'}
+      />
+    );
+    // Each bar has its own grid, measured from its start (bars can differ in length).
+    for (let b = r * bpr; b < (r + 1) * bpr; b++) {
+      const start = m.barStart(b);
+      const len = m.barLength(b);
+      const beat = m.beatTicks(b);
+      for (let t = step; t < len; t += step) {
+        if (t % beat === 0) continue;
+        const x = xIn(r, start + t);
+        lines.push(<line key={`g${b}:${t}`} x1={x} x2={x} y1={top + RULER_H} y2={top + rowBody} className="tl-grid" />);
+      }
+      for (let t = 0; t < len; t += beat) lines.push(barLines(xIn(r, start + t), `b${b}:${t}`, t === 0));
     }
-    for (let t = 0; t <= rowTicks; t += beat) {
-      const x = gutter + t * ppt;
-      const isBar = t % bar === 0;
-      lines.push(
-        <line
-          key={`b${t}`}
-          x1={x}
-          x2={x}
-          y1={isBar ? top : top + RULER_H - 6}
-          y2={top + rowBody}
-          className={isBar ? 'tl-bar' : 'tl-beat'}
-        />,
-      );
-    }
+    lines.push(barLines(right, 'end', true));
     const labelX = isDrums ? 10 : piano ? gutter - 6 : gutter / 2;
     return (
       <g key={r} className="tl-row">
         <rect x={0} y={top} width={width} height={rowBody} className="tl-row-bg" />
         <rect x={gutter} y={top} width={right - gutter} height={RULER_H} className="tl-ruler" />
-        {Array.from({ length: ed.barsPerRow }, (_, i) => (
-          <text key={i} x={gutter + i * bar * ppt + 5} y={top + 15} className="tl-barnum">
-            {r * ed.barsPerRow + i + 1}
-          </text>
-        ))}
+        {Array.from({ length: bpr }, (_, i) => {
+          const b = r * bpr + i;
+          const x = xIn(r, m.barStart(b));
+          return (
+            <text key={i} x={x + 5} y={top + 15} className="tl-barnum">
+              {b + 1}
+              {m.changesAt(b) && <tspan className="tl-timesig">{` ${sigLabel(m.sigAt(b))}`}</tspan>}
+            </text>
+          );
+        })}
         <rect x={0} y={top} width={gutter} height={rowBody} className="tl-gutter-bg" />
         {piano
           ? lanes.map((s) => (
@@ -453,12 +471,12 @@ export function Timeline({ song, ed, peers }: Props) {
       const out: { key: string; r: number; x0: number; x1: number; first: boolean; last: boolean }[] = [];
       for (let t = run.start; t < run.end;) {
         const r = rowOf(t);
-        const segEnd = Math.min(run.end, (r + 1) * rowTicks);
+        const segEnd = Math.min(run.end, rowEnd(r));
         out.push({
           key: `${run.start}:${r}`,
           r,
-          x0: gutter + (t - r * rowTicks) * ppt,
-          x1: gutter + (segEnd - r * rowTicks) * ppt,
+          x0: xIn(r, t),
+          x1: xIn(r, segEnd),
           first: t === run.start,
           last: segEnd === run.end,
         });
@@ -486,7 +504,7 @@ export function Timeline({ song, ed, peers }: Props) {
             <rect
               x={cursorAt.x}
               y={laneY(cursorAt.r, ed.cursorString) - rowH / 2}
-              width={Math.max(step * ppt, 6)}
+              width={Math.max(step * pptOf(cursorAt.r), 6)}
               height={rowH}
               className="tl-cursor-cell"
             />
@@ -579,20 +597,20 @@ export function Timeline({ song, ed, peers }: Props) {
           {peers
             .filter((p) => p.trackId === ed.trackId && inView(p.string))
             .map((p) => {
-              const m = marker(p.cursor);
-              if (!visibleRow(m.r)) return null;
+              const pm = marker(p.cursor);
+              if (!visibleRow(pm.r)) return null;
               return (
                 <g key={p.actor} pointerEvents="none">
-                  <line x1={m.x} x2={m.x} y1={m.y1 + RULER_H} y2={m.y2} stroke={p.color} strokeWidth={2} />
+                  <line x1={pm.x} x2={pm.x} y1={pm.y1 + RULER_H} y2={pm.y2} stroke={p.color} strokeWidth={2} />
                   <rect
-                    x={m.x}
-                    y={laneY(m.r, p.string) - rowH / 2}
-                    width={step * ppt}
+                    x={pm.x}
+                    y={laneY(pm.r, p.string) - rowH / 2}
+                    width={step * pptOf(pm.r)}
                     height={rowH}
                     fill={p.color}
                     opacity={0.15}
                   />
-                  <text x={m.x + 4} y={m.y1 + RULER_H + 10} fill={p.color} className="tl-peer">
+                  <text x={pm.x + 4} y={pm.y1 + RULER_H + 10} fill={p.color} className="tl-peer">
                     {p.name}
                   </text>
                 </g>

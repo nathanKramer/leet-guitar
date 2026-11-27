@@ -1,10 +1,12 @@
 /** User-level actions shared by the toolbar, fretboard, timeline and keyboard shortcuts. */
 import * as cmd from '../model/commands';
-import { barTicks, durationTicks, type BaseDuration } from '../model/durations';
+import { setTimeSig as setBarsTimeSig } from '../model/arrange';
+import { durationTicks, type BaseDuration } from '../model/durations';
+import { meter, sigLabel } from '../model/meter';
 import { TRACK_KINDS } from '../model/instruments';
 import { trackKindFor, type Instrument } from '../model/gm';
 import type { Clip } from '../model/transfer';
-import type { ID, TrackKind } from '../model/types';
+import type { ID, TimeSig, TrackKind } from '../model/types';
 import { BARS_PER_ROW, type EditorState } from './editorStore';
 import { docStore, editor, player, saveCountIn } from '../session';
 
@@ -72,8 +74,35 @@ export function setFret(id: ID, fret: number) {
   player.preview(song(), n.trackId, track.tuning[n.string] + fret);
 }
 
-/** Ticks covered by one timeline row. */
-export const rowTicks = () => ed().barsPerRow * barTicks(song().meta);
+/** Move the cursor `bars` bars later (or earlier), keeping its place in the bar where the new bar is long enough. */
+export function moveCursorBars(bars: number) {
+  const m = meter(song());
+  editor.set((s) => {
+    const bar = m.barAt(s.cursor);
+    const target = Math.max(0, bar + bars);
+    const offset = Math.min(s.cursor - m.barStart(bar), m.barLength(target) - 1);
+    return { cursor: m.barStart(target) + offset };
+  });
+}
+
+/** PgUp/PgDn: one timeline row (a few bars) later or earlier. */
+export const moveCursorRow = (dir: 1 | -1) => moveCursorBars(dir * ed().barsPerRow);
+
+/**
+ * Set the time signature from the cursor's bar: up to the next change, or with `last`, for bars up to `last` only
+ * (later bars keep theirs). Later bars' notes move with their bars; notes that no longer fit are left out.
+ */
+export function setTimeSig(sig: TimeSig, first = meter(song()).barAt(ed().cursor), last?: number) {
+  const { ops, dropped } = setBarsTimeSig(song(), sig, first, last);
+  if (!ops.length) return;
+  docStore.transact(ops);
+  // Keep the cursor at the start of the bar it was in (the bar may have moved).
+  editor.set({ cursor: meter(song()).barStart(first) });
+  if (dropped) {
+    const bars = last === undefined || last === first ? `bar ${first + 1}` : `bars ${first + 1}–${last + 1}`;
+    notify(`${sigLabel(sig)} in ${bars}: ${plural(dropped, 'note')} left out (no room). Ctrl+Z brings them back.`);
+  }
+}
 
 /**
  * Set the note value for new notes, and apply it to any selected notes. If the selected notes all end at the
@@ -100,16 +129,12 @@ export function toggleDotted() {
   setDuration(ed().base, false, !ed().dotted);
 }
 
-export function moveCursor(deltaTicks: number) {
-  editor.set((s) => ({ cursor: Math.max(0, s.cursor + deltaTicks) }));
-}
-
 /**
  * Step the cursor by the current note value and select whatever starts at the new position (a whole chord,
  * if several notes start there), sounding it. Stepping onto empty space clears the selection.
  */
 export function stepCursor(dir: 1 | -1) {
-  moveCursor(dir * stepTicks());
+  editor.set((s) => ({ cursor: meter(song()).step(s.cursor, stepTicks(), dir) }));
   const { cursor, trackId } = ed();
   const here = cmd
     .notesInTrack(song(), trackId)
@@ -250,7 +275,7 @@ export function insertPattern(id: ID) {
   const pattern = song().patterns[id];
   if (!pattern) return;
   const { playhead, cursor } = ed();
-  const at = playhead === null ? cursor : Math.round(playhead / stepTicks()) * stepTicks();
+  const at = playhead === null ? cursor : meter(song()).round(playhead, stepTicks());
   placeAt(pattern, at, 'Inserted');
 }
 

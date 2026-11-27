@@ -28,7 +28,7 @@ export function compareStamps(x: Stamp, y: Stamp): number {
   return x.a < y.a ? -1 : 1;
 }
 
-export const COLLECTIONS = ['meta', 'tracks', 'notes', 'patterns'] as const;
+export const COLLECTIONS = ['meta', 'tracks', 'notes', 'patterns', 'timeSigs'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 export type Fields = Record<string, unknown>;
 
@@ -52,7 +52,7 @@ export interface Entry {
 export type DocState = Record<Collection, Record<ID, Entry>>;
 
 export function emptyState(): DocState {
-  return { meta: {}, tracks: {}, notes: {}, patterns: {} };
+  return { meta: {}, tracks: {}, notes: {}, patterns: {}, timeSigs: {} };
 }
 
 /** Fill in collections missing from a state saved before they existed. Mutates and returns `state`. */

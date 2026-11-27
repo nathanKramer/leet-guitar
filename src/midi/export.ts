@@ -2,6 +2,7 @@
 import { sortedTracks } from '../model/commands';
 import { isStringed } from '../model/instruments';
 import { PPQ } from '../model/durations';
+import { meter } from '../model/meter';
 import { ticksToSeconds } from '../model/durations';
 import {
   DRUM_CHANNEL,
@@ -71,12 +72,18 @@ export function exportMidi(song: Song, mode: ChannelMode = 'per-track'): Uint8Ar
   const conductor: TimedEvent[] = [
     { tick: 0, order: 0, bytes: metaEvent(0x03, ascii(meta.title)) },
     { tick: 0, order: 0, bytes: metaEvent(0x51, [(tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff]) },
-    {
-      tick: 0,
-      order: 0,
-      bytes: metaEvent(0x58, [meta.beatsPerBar, Math.round(Math.log2(meta.beatUnit)), 24, 8]),
-    },
   ];
+  // A time signature event at the start of the song and at every bar that changes it.
+  const m = meter(song);
+  for (const c of [{ bar: 0, ...meta }, ...Object.values(song.timeSigs)]) {
+    if (!m.changesAt(c.bar)) continue;
+    const sig = m.sigAt(c.bar);
+    conductor.push({
+      tick: m.barStart(c.bar),
+      order: 0,
+      bytes: metaEvent(0x58, [sig.beatsPerBar, Math.round(Math.log2(sig.beatUnit)), 24, 8]),
+    });
+  }
   const chunks = [trackChunk(conductor)];
 
   for (const track of tracks) {

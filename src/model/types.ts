@@ -1,11 +1,20 @@
 export type ID = string;
 
-export interface SongMeta {
-  title: string;
-  bpm: number;
+export interface TimeSig {
   beatsPerBar: number;
   /** Denominator of the time signature (4 = quarter note gets the beat). */
   beatUnit: number;
+}
+
+/** The song settings. The time signature is the first bar's; later bars can change it (see TimeSigChange). */
+export interface SongMeta extends TimeSig {
+  title: string;
+  bpm: number;
+}
+
+/** A time signature change at the start of a bar (counting from 0; always 1 or more). It holds until the next one. */
+export interface TimeSigChange extends TimeSig {
+  bar: number;
 }
 
 export type TrackKind = 'guitar' | 'bass' | 'piano' | 'drums';
@@ -75,4 +84,6 @@ export interface Song {
   tracks: Record<ID, Track>;
   notes: Record<ID, Note>;
   patterns: Record<ID, Pattern>;
+  /** Time signature changes after the first bar, keyed by `bar-<n>`. */
+  timeSigs: Record<ID, TimeSigChange>;
 }

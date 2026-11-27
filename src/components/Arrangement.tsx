@@ -5,7 +5,7 @@ import type { EditorState } from '../editor/editorStore';
 import { blockKey, movedTo, usedBars, type Block } from '../model/arrange';
 import { sortedTracks } from '../model/commands';
 import { notePitch } from '../model/drums';
-import { barTicks } from '../model/durations';
+import { meter, sigLabel } from '../model/meter';
 import type { Note, Song } from '../model/types';
 
 const CELL_W = 72;
@@ -48,7 +48,12 @@ const barsLabel = (first: number, count: number) =>
  */
 export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
   const tracks = sortedTracks(song);
-  const bar = barTicks(song.meta);
+  const m = meter(song);
+  /** x of a tick: bars are all the same width, whatever their length. */
+  const tickX = (t: number) => {
+    const b = m.barAt(t);
+    return (b + (t - m.barStart(b)) / m.barLength(b)) * CELL_W;
+  };
   const selected = arr.selectedBlocks(ed.arrSel);
   const selectedKeys = new Set(selected.map(blockKey));
   const whole = arr.wholeBars(selected);
@@ -81,7 +86,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
     fit,
     used + SPARE_BARS,
     Math.min(used + MAX_EMPTY_BARS, lastSelected + 2 + (drag?.kind === 'move' ? Math.max(0, drag.bars) : 0)),
-    Math.floor((ed.playhead ?? ed.cursor) / bar) + 1,
+    m.barAt(ed.playhead ?? ed.cursor) + 1,
   );
   const width = bars * CELL_W;
   /** Bottom of the last track; below it is empty space for selection boxes. */
@@ -97,7 +102,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
       const t = song.tracks[n.trackId];
       const s = t && out.get(t.id);
       if (!s) continue;
-      const b = Math.floor(n.start / bar);
+      const b = m.barAt(n.start);
       s.byBar.set(b, [...(s.byBar.get(b) ?? []), n]);
       // Drums are sketched by kit piece (top lane at the top), everything else by pitch.
       const y = t.kind === 'drums' ? -n.string : notePitch(t, n);
@@ -105,7 +110,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
       s.hi = Math.max(s.hi, y);
     }
     return out;
-  }, [song.notes, song.tracks, bar]);
+  }, [song.notes, song.tracks, song.timeSigs, song.meta.beatsPerBar, song.meta.beatUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the focused block in view.
   const focus = ed.arrSel.focus;
@@ -121,9 +126,9 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || ed.playhead === null) return;
-    const x = (ed.playhead / bar) * CELL_W;
+    const x = tickX(ed.playhead);
     if (x < el.scrollLeft || x > el.scrollLeft + gridW(el) - CELL_W) el.scrollLeft = x - CELL_W;
-  }, [ed.playhead !== null && Math.floor(ed.playhead / bar)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ed.playhead !== null && m.barAt(ed.playhead)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pointAt = (ev: { clientX: number; clientY: number }) => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -282,8 +287,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
     return 'Click a block to select it; drag to select several';
   })();
 
-  const ppt = CELL_W / bar;
-  const playheadX = ed.playhead !== null ? ed.playhead * ppt : null;
+  const playheadX = ed.playhead !== null ? tickX(ed.playhead) : null;
   const has = selected.length > 0;
   const cell = (b: Block, dRows = 0, dBars = 0) => ({
     x: (b.bar + dBars) * CELL_W,
@@ -382,6 +386,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
                 <line x1={b * CELL_W} x2={b * CELL_W} y1={0} y2={height} className="ar-barline" />
                 <text x={b * CELL_W + 6} y={16} className="ar-barnum">
                   {b + 1}
+                  {m.changesAt(b) && <tspan className="ar-timesig">{` ${sigLabel(m.sigAt(b))}`}</tspan>}
                 </text>
               </g>
             ))}
@@ -414,16 +419,20 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
                           selectedKeys.has(blockKey({ trackId: t.id, bar: b })) ? 'ar-clip selected' : 'ar-clip'
                         }
                       />
-                      {notes.map((n) => (
-                        <rect
-                          key={n.id}
-                          x={n.start * ppt}
-                          y={yOf(n) - 1}
-                          width={Math.max(2, Math.min(n.duration * ppt, width - n.start * ppt) - 1)}
-                          height={2.5}
-                          className="ar-note"
-                        />
-                      ))}
+                      {notes.map((n) => {
+                        const x = tickX(n.start);
+                        const w = (n.duration / m.barLength(b)) * CELL_W;
+                        return (
+                          <rect
+                            key={n.id}
+                            x={x}
+                            y={yOf(n) - 1}
+                            width={Math.max(2, Math.min(w, width - x) - 1)}
+                            height={2.5}
+                            className="ar-note"
+                          />
+                        );
+                      })}
                     </g>
                   ))}
                 </g>
@@ -433,7 +442,7 @@ export function Arrangement({ song, ed }: { song: Song; ed: EditorState }) {
             {drag?.kind === 'move' &&
               (drag.rows !== 0 || drag.bars !== 0) &&
               selected.map((b) => <rect key={blockKey(b)} {...cell(b, drag.rows, drag.bars)} className="ar-ghost" />)}
-            <line x1={ed.cursor * ppt} x2={ed.cursor * ppt} y1={0} y2={height} className="ar-cursor" />
+            <line x1={tickX(ed.cursor)} x2={tickX(ed.cursor)} y1={0} y2={height} className="ar-cursor" />
             {box && (
               <rect x={box.x0} y={box.y0} width={box.x1 - box.x0} height={box.y1 - box.y0} className="ar-marquee" />
             )}

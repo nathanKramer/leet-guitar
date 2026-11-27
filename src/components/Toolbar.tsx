@@ -4,10 +4,13 @@ import { useStore, type EditorState } from '../editor/editorStore';
 import { newProject, openProject, saveProject } from '../editor/project';
 import { loadSoundFontFile, removeSoundFont, setSource, sound, type SoundSource } from '../editor/sound';
 import { downloadMidi, type ChannelMode } from '../midi/export';
+import { timeSigBars } from '../editor/arrange';
 import { setMeta } from '../model/commands';
+import { BEAT_UNITS } from '../model/materialize';
+import { meter } from '../model/meter';
 import { isStringed } from '../model/instruments';
 import { BASE_DURATIONS, DURATION_LABELS, DURATION_NAMES } from '../model/durations';
-import type { Song } from '../model/types';
+import type { Song, TimeSig } from '../model/types';
 import { awareness, docStore, editor } from '../session';
 import type { PeerState } from '../sync/awareness';
 
@@ -109,26 +112,7 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
             }}
           />
         </label>
-        <label className="field">
-          Time
-          <select
-            value={meta.beatsPerBar}
-            onChange={(e) => docStore.transact(setMeta({ beatsPerBar: Number(e.target.value) }))}
-          >
-            {Array.from({ length: 15 }, (_, i) => i + 1).map((n) => (
-              <option key={n}>{n}</option>
-            ))}
-          </select>
-          /
-          <select
-            value={meta.beatUnit}
-            onChange={(e) => docStore.transact(setMeta({ beatUnit: Number(e.target.value) }))}
-          >
-            {[2, 4, 8, 16].map((n) => (
-              <option key={n}>{n}</option>
-            ))}
-          </select>
-        </label>
+        <TimeSigControl song={song} ed={ed} />
       </div>
 
       <div className="group" role="radiogroup" aria-label="Note value">
@@ -206,6 +190,37 @@ export function Toolbar({ song, ed, peers }: { song: Song; ed: EditorState; peer
         ))}
       </div>
     </header>
+  );
+}
+
+/**
+ * The time signature of the current bar (the cursor's, or in the arrangement the selected bars). Changing it
+ * changes it from that bar up to the next change, or in the arrangement for just the selected bars.
+ */
+function TimeSigControl({ song, ed }: { song: Song; ed: EditorState }) {
+  const { first, last } = timeSigBars(ed);
+  const m = meter(song);
+  const sig = m.sigAt(first);
+  const bars = last === undefined ? null : last === first ? `bar ${first + 1}` : `bars ${first + 1}–${last + 1}`;
+  const title = bars
+    ? `Time signature of ${bars} (the bars after keep theirs)`
+    : `Time signature from bar ${first + 1}${m.nextChange(first) < Infinity ? ` to bar ${m.nextChange(first)}` : ' on'}`;
+  const set = (patch: Partial<TimeSig>) => act.setTimeSig({ ...sig, ...patch }, first, last);
+  return (
+    <label className="field" title={title}>
+      {bars ? (last === first ? `Bar ${first + 1}` : `Bars ${first + 1}–${last! + 1}`) : `Time (bar ${first + 1})`}
+      <select value={sig.beatsPerBar} onChange={(e) => set({ beatsPerBar: Number(e.target.value) })}>
+        {Array.from({ length: 15 }, (_, i) => i + 1).map((n) => (
+          <option key={n}>{n}</option>
+        ))}
+      </select>
+      /
+      <select value={sig.beatUnit} onChange={(e) => set({ beatUnit: Number(e.target.value) })}>
+        {BEAT_UNITS.map((n) => (
+          <option key={n}>{n}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 

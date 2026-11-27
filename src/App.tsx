@@ -12,15 +12,19 @@ import { useStore } from './editor/editorStore';
 import { handleKeyDown } from './editor/keyboard';
 import { loadProjectFile } from './editor/project';
 import { sortedTracks } from './model/commands';
-import { describeDuration, describeNoteValue, PPQ } from './model/durations';
+import { describeDuration, describeNoteValue } from './model/durations';
+import { meter } from './model/meter';
+import type { Song } from './model/types';
 import { editor, usePeers, useSong } from './session';
 
-function position(tick: number, beatsPerBar: number, beatUnit: number) {
-  const beat = (PPQ * 4) / beatUnit;
-  const bar = Math.floor(tick / (beat * beatsPerBar)) + 1;
-  const beatInBar = (Math.floor(tick / beat) % beatsPerBar) + 1;
-  const sub = tick % beat;
-  return `${bar}.${beatInBar}${sub ? ` +${sub}t` : ''}`;
+/** Bar.beat (+ ticks into the beat), counting from 1. */
+function position(song: Song, tick: number) {
+  const m = meter(song);
+  const bar = m.barAt(tick);
+  const beat = m.beatTicks(bar);
+  const into = tick - m.barStart(bar);
+  const sub = into % beat;
+  return `${bar + 1}.${Math.floor(into / beat) + 1}${sub ? ` +${sub}t` : ''}`;
 }
 
 export default function App() {
@@ -99,7 +103,7 @@ export default function App() {
           )}
           <footer className="statusbar">
             <span>
-              Cursor <b>{position(ed.cursor, song.meta.beatsPerBar, song.meta.beatUnit)}</b>
+              Cursor <b>{position(song, ed.cursor)}</b>
             </span>
             {ed.notice && (
               <span className="notice" role="status">

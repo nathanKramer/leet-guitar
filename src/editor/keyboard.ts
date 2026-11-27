@@ -116,7 +116,7 @@ export function handleKeyDown(e: KeyboardEvent) {
       case 'PageDown':
       case 'PageUp':
         // Same spot, one timeline row (a few bars) later or earlier.
-        act.moveCursor((e.key === 'PageDown' ? 1 : -1) * act.rowTicks());
+        act.moveCursorRow(e.key === 'PageDown' ? 1 : -1);
         break;
       case 'p':
       case 'P':
