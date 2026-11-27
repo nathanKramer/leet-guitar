@@ -2,7 +2,7 @@
 import * as cmd from '../model/commands';
 import { setTimeSig as setBarsTimeSig } from '../model/arrange';
 import { durationTicks, type BaseDuration } from '../model/durations';
-import { meter, sigLabel } from '../model/meter';
+import { meter } from '../model/meter';
 import { TRACK_KINDS } from '../model/instruments';
 import { trackKindFor, type Instrument } from '../model/gm';
 import type { Clip } from '../model/transfer';
@@ -90,18 +90,14 @@ export const moveCursorRow = (dir: 1 | -1) => moveCursorBars(dir * ed().barsPerR
 
 /**
  * Set the time signature from the cursor's bar: up to the next change, or with `last`, for bars up to `last` only
- * (later bars keep theirs). Later bars' notes move with their bars; notes that no longer fit are left out.
+ * (later bars keep theirs). Only the bar lines move; the notes stay where they are.
  */
 export function setTimeSig(sig: TimeSig, first = meter(song()).barAt(ed().cursor), last?: number) {
-  const { ops, dropped } = setBarsTimeSig(song(), sig, first, last);
+  const ops = setBarsTimeSig(song(), sig, first, last);
   if (!ops.length) return;
   docStore.transact(ops);
-  // Keep the cursor at the start of the bar it was in (the bar may have moved).
+  // Keep the cursor at the start of the bar it was in.
   editor.set({ cursor: meter(song()).barStart(first) });
-  if (dropped) {
-    const bars = last === undefined || last === first ? `bar ${first + 1}` : `bars ${first + 1}–${last + 1}`;
-    notify(`${sigLabel(sig)} in ${bars}: ${plural(dropped, 'note')} left out (no room). Ctrl+Z brings them back.`);
-  }
 }
 
 /**

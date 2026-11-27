@@ -6,15 +6,15 @@
  * over a bar line keeps ringing into whatever bar now follows). Afterwards the one-note-per-lane rule is
  * applied: a note that would ring into the next note on its string, key or drum is cut short.
  *
- * Time signatures go with their bars too: a moved 7/8 bar is still 7/8 wherever it lands. A note keeps its place
- * within its bar, so when a bar gets shorter (a new time signature, or a block pasted from a longer bar), notes
- * that no longer fit in it are left out.
+ * Time signatures go with their bars too: a moved 7/8 bar is still 7/8 wherever it lands. A block pasted into a
+ * shorter bar leaves out the notes that don't fit. Changing a time signature is different: it moves bar lines,
+ * never notes (see setTimeSig).
  */
 import type { Op } from './crdt';
 import { notePitch } from './drums';
 import { newId } from './id';
 import { isStringed } from './instruments';
-import { meter, Meter, timeSigOps } from './meter';
+import { barSigs, meter, Meter, timeSigOps } from './meter';
 import { placeClip, type Clip } from './transfer';
 import type { ID, Note, Song, TimeSig, Track } from './types';
 
@@ -83,46 +83,28 @@ function commit(song: Song, result: Note[], added: Set<ID>): Op[] {
   return ops;
 }
 
-/** A bar-level edit: its ops and how many notes had to be left out because their bar got too short for them. */
-export interface BarEdit {
-  ops: Op[];
-  dropped: number;
-}
-
 /**
  * Rebuild the song's bars. `place` says which bars a note starting in bar `b` ends up in: none deletes it, one
- * moves it, several make copies (the original note goes to the first). Each bar's time signature goes with it;
- * bars nothing lands in (inserted ones) continue the signature of the bar before. `resign`, if given, then
- * changes the new bars' signatures (it gets them for bars 0..n-1, the last holding for every later bar).
+ * moves it, several make copies (the original note goes to the first). Each bar's time signature goes with it, so
+ * every note still fits its bar; bars nothing lands in (inserted ones) continue the signature of the bar before.
  * `reach` is the furthest bar `place` treats specially.
  */
-function rearrange(
-  song: Song,
-  place: (bar: number) => number[],
-  reach: number,
-  resign?: (sigs: TimeSig[]) => TimeSig[],
-): BarEdit {
+function rearrange(song: Song, place: (bar: number) => number[], reach: number): Op[] {
   const old = meter(song);
   // Past `horizon`, bars hold no notes, share one signature and move as a block, so one of them stands for all.
   const horizon = Math.max(usedBars(song), old.settledFrom, reach) + 1;
-  const sigs: (TimeSig | undefined)[] = [];
-  for (let b = 0; b <= horizon; b++) for (const t of place(b)) sigs[t] = old.sigAt(b);
-  for (let b = 0; b < sigs.length; b++) sigs[b] ??= b ? sigs[b - 1] : old.sigAt(0);
-  let newSigs = sigs as TimeSig[];
-  if (resign) newSigs = resign(newSigs);
-  const next = Meter.fromBars(newSigs);
+  const slots: (TimeSig | undefined)[] = [];
+  for (let b = 0; b <= horizon; b++) for (const t of place(b)) slots[t] = old.sigAt(b);
+  for (let b = 0; b < slots.length; b++) slots[b] ??= b ? slots[b - 1] : old.sigAt(0);
+  const sigs = slots as TimeSig[];
+  const next = Meter.fromBars(sigs);
 
   const result: Note[] = [];
   const added = new Set<ID>();
-  let dropped = 0;
   for (const n of Object.values(song.notes)) {
     const b = old.barAt(n.start);
     const offset = n.start - old.barStart(b);
     place(b).forEach((target, i) => {
-      if (offset >= next.barLength(target)) {
-        dropped++;
-        return;
-      }
       const start = next.barStart(target) + offset;
       if (i === 0) {
         result.push({ ...n, start });
@@ -133,7 +115,7 @@ function rearrange(
       }
     });
   }
-  return { ops: [...timeSigOps(song, newSigs), ...commit(song, result, added)], dropped };
+  return [...timeSigOps(song, sigs), ...commit(song, result, added)];
 }
 
 /** Move `range` to just before bar `to`; the bars in between close up behind it. */
@@ -151,47 +133,42 @@ export function moveBars(song: Song, range: BarRange, to: number): Op[] {
       return [b];
     },
     Math.max(end, to),
-  ).ops;
+  );
 }
 
 /** Repeat `range` straight after itself, pushing later bars along. */
 export function duplicateBars(song: Song, range: BarRange): Op[] {
   const { first, count } = range;
   const end = first + count;
-  return rearrange(song, (b) => (b < first ? [b] : b < end ? [b, b + count] : [b + count]), end).ops;
+  return rearrange(song, (b) => (b < first ? [b] : b < end ? [b, b + count] : [b + count]), end);
 }
 
 /** Insert `count` empty bars before bar `at`. */
 export function insertBars(song: Song, at: number, count = 1): Op[] {
-  return rearrange(song, (b) => [b < at ? b : b + count], at).ops;
+  return rearrange(song, (b) => [b < at ? b : b + count], at);
 }
 
 /** Delete the bars in `range` (in every track); later bars move back to fill the gap. */
 export function deleteBars(song: Song, range: BarRange): Op[] {
   const { first, count } = range;
   const end = first + count;
-  return rearrange(song, (b) => (b < first ? [b] : b < end ? [] : [b - count]), end).ops;
+  return rearrange(song, (b) => (b < first ? [b] : b < end ? [] : [b - count]), end);
 }
 
 /**
  * Give bars a time signature: bars `first` to `last`, or with no `last`, from `first` up to the next change (or
- * the end of the song). Bars after keep their own signature. Notes keep their place within their bar, so later
- * bars move along with the change; notes that no longer fit in a shortened bar are left out.
+ * the end of the song). Bars after keep their own signature. Only the bar lines move: every note stays where it
+ * is in time, so shortening a bar carries its last notes over into the next bar (and so on through the song), and
+ * lengthening one pulls the next bar's first notes back into it.
  */
-export function setTimeSig(song: Song, sig: TimeSig, first: number, last?: number): BarEdit {
-  const end = last === undefined ? meter(song).nextChange(first) : last + 1;
+export function setTimeSig(song: Song, sig: TimeSig, first: number, last?: number): Op[] {
+  const m = meter(song);
+  const end = last === undefined ? m.nextChange(first) : last + 1;
   const finite = Number.isFinite(end);
-  return rearrange(
-    song,
-    (b) => [b],
-    finite ? end : first,
-    (sigs) => {
-      // The last entry stands for every later bar, so with no end it takes the new signature too.
-      const out = [...sigs];
-      for (let b = first; b < (finite ? end : out.length); b++) out[b] = sig;
-      return out;
-    },
-  );
+  // One bar past everything that changes; the last entry stands for every later bar.
+  const sigs = barSigs(m, Math.max(m.settledFrom, finite ? end : first) + 2);
+  for (let b = first; b < (finite ? end : sigs.length); b++) sigs[b] = sig;
+  return timeSigOps(song, sigs);
 }
 
 // ---------------------------------------------------------------------------------------------------------------

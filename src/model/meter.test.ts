@@ -63,53 +63,73 @@ describe('Meter', () => {
   });
 });
 
+/** Every note's start tick, in time order. */
+const ticks = (song: Song) => Object.values(song.notes).map((n) => n.start).sort((a, b) => a - b);
+
 describe('time signature changes', () => {
-  it('changes a bar up to the next change; later bars keep their notes in place', () => {
+  it('moves only the bar lines: notes a shorter bar can’t hold carry over into the next bar', () => {
     const { s } = setup();
-    s.transact(setTimeSig(s.getSong(), sig(3, 4), 1).ops);
+    const before = ticks(s.getSong());
+    s.transact(setTimeSig(s.getSong(), sig(3, 4), 1));
     expect(sigs(s.getSong())).toEqual(['4/4', '3/4', '3/4', '3/4', '3/4', '3/4']);
-    // The note on beat 4 of bar 1 no longer fits a 3/4 bar.
+    expect(ticks(s.getSong())).toEqual(before);
+    // Bars of 1440 ticks from bar 1: beat 4 of the old bar 1 opens bar 2, and everything after shifts along.
     expect(layout(s.getSong())).toEqual([
       [0, 0, 0],
       [1, 0, 1],
-      [2, 0, 2],
-      [3, 0, 3],
+      [2, 0, 9],
+      [2, 480, 2],
+      [3, 960, 3],
     ]);
   });
 
-  it('reports notes left out, and undo brings them back', () => {
+  it('6/4 to 5/4 loses nothing; back to 6/4 restores the bars', () => {
     const { s } = setup();
+    s.transact(setTimeSig(s.getSong(), sig(6, 4), 0));
     const before = layout(s.getSong());
-    const edit = setTimeSig(s.getSong(), sig(3, 4), 1);
-    expect(edit.dropped).toBe(1);
-    s.transact(edit.ops);
-    s.undo();
+    s.transact(setTimeSig(s.getSong(), sig(5, 4), 0));
+    expect(Object.keys(s.getSong().notes)).toHaveLength(5);
+    s.transact(setTimeSig(s.getSong(), sig(6, 4), 0));
     expect(layout(s.getSong())).toEqual(before);
+  });
+
+  it('a longer bar pulls the next bar’s notes back into it', () => {
+    const { s } = setup();
+    s.transact(setTimeSig(s.getSong(), sig(5, 4), 0, 0));
+    expect(layout(s.getSong()).slice(0, 2)).toEqual([
+      [0, 0, 0],
+      [0, 1920, 1],
+    ]);
+  });
+
+  it('undo restores the time signature', () => {
+    const { s } = setup();
+    s.transact(setTimeSig(s.getSong(), sig(3, 4), 1));
+    s.undo();
     expect(sigs(s.getSong())).toEqual(['4/4', '4/4', '4/4', '4/4', '4/4', '4/4']);
   });
 
   it('changes just the given bars; the bars after keep theirs', () => {
     const { s } = setup();
-    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2).ops);
+    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2));
     expect(sigs(s.getSong())).toEqual(['4/4', '4/4', '7/8', '4/4', '4/4', '4/4']);
     expect(Object.keys(s.getSong().timeSigs).sort()).toEqual(['bar-2', 'bar-3']);
-    expect(layout(s.getSong()).map((n) => n[0])).toEqual([0, 1, 1, 2, 3]);
     // Setting it back removes both changes.
-    s.transact(setTimeSig(s.getSong(), sig(4, 4), 2, 2).ops);
+    s.transact(setTimeSig(s.getSong(), sig(4, 4), 2, 2));
     expect(s.getSong().timeSigs).toEqual({});
   });
 
   it('changing the first bar sets the song’s time signature', () => {
     const { s } = setup();
-    s.transact(setTimeSig(s.getSong(), sig(6, 8), 0).ops);
+    s.transact(setTimeSig(s.getSong(), sig(6, 8), 0));
     expect(s.getSong().meta).toMatchObject(sig(6, 8));
     expect(s.getSong().timeSigs).toEqual({});
   });
 
   it('a change stops at the next one', () => {
     const { s } = setup();
-    s.transact(setTimeSig(s.getSong(), sig(5, 4), 3).ops);
-    s.transact(setTimeSig(s.getSong(), sig(3, 4), 1).ops);
+    s.transact(setTimeSig(s.getSong(), sig(5, 4), 3));
+    s.transact(setTimeSig(s.getSong(), sig(3, 4), 1));
     expect(sigs(s.getSong())).toEqual(['4/4', '3/4', '3/4', '5/4', '5/4', '5/4']);
   });
 });
@@ -117,7 +137,7 @@ describe('time signature changes', () => {
 describe('bar edits carry time signatures', () => {
   const odd = () => {
     const { s, track } = setup();
-    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2).ops);
+    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2));
     return { s, track };
   };
 
@@ -144,7 +164,7 @@ describe('bar edits carry time signatures', () => {
       [0, 0],
       [1, 0],
       [1, 1440],
-      [2, 0],
+      [2, 240],
     ]);
   });
 
@@ -154,7 +174,7 @@ describe('bar edits carry time signatures', () => {
     const clip = copyBlocks(s.getSong(), [{ trackId: track, bar: 1 }], tracks)!;
     const r = pasteBlocks(s.getSong(), tracks, clip, 0, 2);
     expect(r.dropped).toBe(0); // beat 4 of 4/4 = 1440 ticks, still inside a 7/8 bar (1680)
-    s.transact(setTimeSig(s.getSong(), sig(3, 4), 2, 2).ops);
+    s.transact(setTimeSig(s.getSong(), sig(3, 4), 2, 2));
     expect(pasteBlocks(s.getSong(), tracks, clip, 0, 2).dropped).toBe(1);
   });
 });
@@ -162,7 +182,7 @@ describe('bar edits carry time signatures', () => {
 describe('saving and exporting', () => {
   it('round-trips time signature changes through a project file', () => {
     const { s } = setup();
-    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2).ops);
+    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2));
     const dst = new DocumentStore({ actor: 'b' });
     dst.transact(initDocument(dst.getSong()), { undoable: false });
     dst.transact(openProjectOps(dst.getSong(), parseProject(serializeProject(s.getSong()))).ops);
@@ -172,7 +192,7 @@ describe('saving and exporting', () => {
 
   it('writes a MIDI time signature event at each change', () => {
     const { s } = setup();
-    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2).ops);
+    s.transact(setTimeSig(s.getSong(), sig(7, 8), 2, 2));
     const bytes = [...exportMidi(s.getSong())];
     const events: number[][] = [];
     for (let i = 0; i + 3 < bytes.length; i++) {
