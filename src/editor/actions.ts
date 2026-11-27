@@ -177,9 +177,9 @@ export function toggleDotted() {
 
 /**
  * Step the cursor by the current note value and select whatever starts at the new position (a whole chord,
- * if several notes start there), sounding it. Stepping onto empty space clears the selection.
+ * if several notes start there), sounding it unless `silent`. Stepping onto empty space clears the selection.
  */
-export function stepCursor(dir: 1 | -1) {
+export function stepCursor(dir: 1 | -1, silent = false) {
   editor.set((s) => ({ cursor: meter(song()).step(s.cursor, stepTicks(), dir) }));
   const { cursor, trackId } = ed();
   const here = cmd
@@ -187,7 +187,7 @@ export function stepCursor(dir: 1 | -1) {
     .filter((n) => n.start === cursor)
     .map((n) => n.id);
   editor.set({ selection: here });
-  here.forEach(previewNote);
+  if (!silent) here.forEach(previewNote);
 }
 
 /**

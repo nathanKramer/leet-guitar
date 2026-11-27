@@ -91,7 +91,8 @@ export function handleKeyDown(e: KeyboardEvent) {
         const dir = e.key === 'ArrowRight' ? 1 : -1;
         if (e.altKey && hasSel) act.moveSelection(dir * act.stepTicks());
         else if (e.shiftKey) act.extendSelection(dir);
-        else act.stepCursor(dir);
+        // Holding the key auto-repeats; sounding every step would pile up into a wall of sound.
+        else act.stepCursor(dir, e.repeat);
         break;
       }
       case 'ArrowUp':
